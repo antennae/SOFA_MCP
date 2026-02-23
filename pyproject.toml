@@ -1,0 +1,12 @@
+[tool.poetry]
+name = "sofa-mcp"
+version = "0.1.0"
+description = "A sim-to-real MCP for SOFA."
+authors = ["Your Name <you@example.com>"]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+pyserial = "^3.5"
+rospkg = "^1.5.0"
+trimesh = "^3.23.5"
+fastmcp = "^0.1.0"
