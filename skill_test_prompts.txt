@@ -1,0 +1,91 @@
+SOFA_MCP Skill Test Prompts
+
+============================
+Independent (single-skill)
+============================
+
+1) Start server
+- "Start the SOFA MCP server and confirm it’s reachable. Don’t run any other tools yet."
+
+2) Math sandbox
+- "Use run_math_script to compute the diagonal length of the bbox with min=[-1,-2,-3], max=[4,5,6], and print the result."
+
+3) Asset path resolution (exists)
+- "Call resolve_asset_path on meshes/prostate.vtk and return the absolute path + existence."
+
+4) Asset path resolution (missing)
+- "Call resolve_asset_path on meshes/does_not_exist.vtk and clearly report the failure."
+
+5) Mesh bounding box
+- "Call get_mesh_bounding_box for meshes/prostate.vtk and report min/max."
+
+6) Mesh topology
+- "Call inspect_mesh_topology for meshes/prostate.vtk and report whether it’s surface/volumetric/unknown."
+
+7) Mesh stats
+- "Call mesh_stats for meshes/prostate.vtk and return bbox + counts + topology_kind."
+
+8) Component search
+- "Call search_sofa_components with query Tetra* (limit 20). If registry is unavailable, explain that and stop."
+
+9) Component query
+- "Call query_sofa_component for MechanicalObject and return its key info/fields."
+
+10) Scene validation (minimal success)
+- "Generate script_content that defines only add_scene_content(parent_node) and adds a MechanicalObject. Then call validate_scene and show stdout."
+
+11) Scene validation (intentional failure)
+- "Call validate_scene with a script_content that does NOT define add_scene_content. Confirm the error is surfaced cleanly."
+
+12) Scene summary
+- "Generate a minimal script_content that adds MechanicalObject, then call summarize_scene and report: node_count, object_count, mechanical_object_count, and the checks list."
+
+13) Write scene
+- "Generate a minimal script_content and call write_scene to write tmp_scene_written.py. Then call load_scene to confirm the file contains def createScene."
+
+14) Load scene (missing)
+- "Call load_scene on no_such_scene_file.py and confirm the tool returns a structured error."
+
+15) Patch scene (insert)
+- "Write a scene file tmp_patch_me.py using write_scene, then call patch_scene with an insert_after op anchored on def createScene(rootNode): to insert a comment line. Then load_scene and prove the comment exists."
+
+16) Patch scene (anchor missing)
+- "Call patch_scene on tmp_patch_me.py with an anchor string that doesn’t exist. Confirm it fails without corrupting the file (use load_scene before/after to compare)."
+
+============================
+Combined (2–3 skills)
+============================
+
+1) Mesh preflight -> math-derived scale
+- "Use mesh_stats on meshes/prostate.vtk, then use run_math_script to compute a suggested scale = 1.0 / diagonal (guard if diagonal=0). Return the computed scale and bbox."
+
+2) Component discovery -> confirm parameters
+- "Use search_sofa_components for SparseLDL* (limit 10), pick the best match, then call query_sofa_component on that class and summarize what parameters look important."
+
+3) Scene generation with asset preflight
+- "First call resolve_asset_path + mesh_stats on meshes/prostate.vtk. Then generate a script_content that (a) adds a MechanicalObject, and (b) stores the resolved mesh path in a string variable (even if you don’t load it yet). Validate with validate_scene."
+
+4) Validate -> summarize (structure gate)
+- "Generate script_content that adds 2 MechanicalObjects in two different child nodes under parent_node. Run validate_scene, then summarize_scene, and verify mechanical_object_count >= 2."
+
+5) Write -> load -> patch
+- "Create script_content, write_scene to tmp_edit_flow.py, then load_scene to confirm it’s written. Then patch_scene to replace showBehaviorModels with showVisualModels in the file, and load_scene again to confirm the replacement."
+
+============================
+End-to-end (agentic workflows)
+============================
+
+1) Natural language -> validated scene file
+- "I want a SOFA scene with a single particle at the origin, and nothing else fancy. Generate script_content, validate it, summarize it, then write it to out/scenes/particle_minimal.py."
+- "generate a new particle.py, with two points at [0, 0, 1] and [0, 0, 2]. add gravity, and make the mechanical object visible "
+
+2) Natural language -> validated scene file
+- "I want a SOFA scene with a cantilever beam, fixed at one end, with gravity added. generate the scene, validate it, summarize and write it to cantilever_beam.py"
+
+3) Natural language -> preflight mesh -> validated scene (stub)
+- "I want a scene that will eventually use meshes/prostate.vtk. First preflight the mesh (resolve path + stats). "
+- "Add volumetric mesh as Tetrahedron element, fix at the bottom, validate, summarize and write to prostate.py"
+- "based on prostate.py, add the internal chamber using inner_*.stl, internal chamber can be pressurized, validate, summarize, write it to prostate_chamber.py if successful"
+
+4) Natural language to edit a scene.
+- "based on cantilever_beam.py, add a force at the free end of the beam for support. validate, summarize, write it to beam_support.py if successful"

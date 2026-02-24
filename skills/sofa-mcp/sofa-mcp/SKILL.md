@@ -147,7 +147,7 @@ When the user says “I want a scene that …”, follow this loop:
             -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"validate_scene","arguments":{"script_content":"<script_content>"}}}'
     ```
 
-        ### 10. `summarize_scene`
+### 10. `summarize_scene`
 *   **Description:** Builds the scene graph (without running a simulation step) and returns a structured summary of nodes/objects plus basic verification checks.
 *   **Parameters:**
     *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `add_scene_content(parent_node)`.
@@ -162,7 +162,7 @@ When the user says “I want a scene that …”, follow this loop:
             -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"summarize_scene","arguments":{"script_content":"<script_content>"}}}'
     ```
 
-        ### 11. `write_scene`
+### 11. `write_scene`
 *   **Description:** Writes the generated SOFA scene file to disk **without** running validation. Prefer calling `validate_scene` first.
 *   **Parameters:**
     *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `add_scene_content(parent_node)`.
@@ -177,7 +177,7 @@ When the user says “I want a scene that …”, follow this loop:
             -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"write_scene","arguments":{"script_content":"<script_content>","output_filename":"<output_filename>"}}}'
     ```
 
-        ### 12. `write_and_test_scene`
+### 12. `write_and_test_scene`
 *   **Description:** Drafts a SOFA scene from a provided Python script, dry-runs it, and reports any errors or issues found during the process.
 *   **Parameters:**
     *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `add_scene_content(parent_node)` which adds objects/nodes under the provided SOFA node. This content is embedded into a generated scene wrapper that provides `createScene(rootNode)` and baseline solver/animation-loop utilities; validation attempts to initialize the scene and animate one simulation step (`dt=0.01`).
