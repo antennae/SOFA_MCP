@@ -7,7 +7,7 @@ import sys
 # This allows running the test script from the root directory
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from sofa_mcp.architect.component_query import query_sofa_component
+from sofa_mcp.architect.component_query import query_sofa_component, search_sofa_components
 
 
 
@@ -81,6 +81,34 @@ class TestComponentQuery(unittest.TestCase):
         result = query_sofa_component("SomeComponent")
         self.assertIn("error", result)
         self.assertEqual(result["error"], "An error occurred: A generic error.")
+
+
+    @patch('sofa_mcp.architect.component_query.Sofa.Core')
+    def test_search_sofa_components_success(self, mock_sofa_core):
+        mock_factory_inst = MagicMock()
+        mock_factory_inst.getClassNames.return_value = [
+            "MechanicalObject",
+            "EulerImplicitSolver",
+            "TetrahedronSetTopologyContainer",
+            "SparseLDLSolver",
+        ]
+        mock_sofa_core.ObjectFactory.getInstance.return_value = mock_factory_inst
+
+        result = search_sofa_components("mech")
+        self.assertNotIn("error", result)
+        self.assertIn("MechanicalObject", result.get("matches", []))
+
+        # Prefix mode
+        result2 = search_sofa_components("Tetra*")
+        self.assertIn("TetrahedronSetTopologyContainer", result2.get("matches", []))
+
+
+    @patch('sofa_mcp.architect.component_query.Sofa.Core')
+    def test_search_sofa_components_unavailable(self, mock_sofa_core):
+        # No ObjectFactory methods present / return empty list
+        mock_sofa_core.ObjectFactory.getInstance.return_value.getClassNames.return_value = []
+        result = search_sofa_components("anything")
+        self.assertIn("error", result)
 
 if __name__ == '__main__':
     unittest.main()

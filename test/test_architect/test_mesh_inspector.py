@@ -9,7 +9,12 @@ import sys
 # Add the sofa_mcp path to the test
 sys.path.insert(0, '.')
 
-from sofa_mcp.architect.mesh_inspector import get_mesh_bounding_box, inspect_mesh_topology
+from sofa_mcp.architect.mesh_inspector import (
+    get_mesh_bounding_box,
+    inspect_mesh_topology,
+    resolve_asset_path,
+    mesh_stats,
+)
 
 class TestMeshInspector(unittest.TestCase):
 
@@ -81,6 +86,33 @@ CELL_TYPES 1
         """Test topology inspection with a non-existent file."""
         result = inspect_mesh_topology("non_existent_file.vtk")
         self.assertTrue(result.startswith("Error inspecting mesh topology:"))
+
+    def test_resolve_asset_path_exists(self):
+        result = resolve_asset_path(self.surface_mesh_path)
+        self.assertTrue(result["exists"])
+        self.assertTrue(result["is_file"])
+        self.assertIn("path", result)
+
+    def test_resolve_asset_path_missing(self):
+        result = resolve_asset_path("does_not_exist.stl")
+        self.assertFalse(result["exists"])
+        self.assertIn("error", result)
+
+    def test_mesh_stats_surface(self):
+        stats = mesh_stats(self.surface_mesh_path)
+        self.assertNotIn("error", stats)
+        self.assertEqual(stats.get("topology_kind"), "surface")
+        self.assertEqual(stats.get("vertex_count"), 3)
+        self.assertEqual(stats.get("face_count"), 1)
+        self.assertIn("bounding_box", stats)
+
+    def test_mesh_stats_volume_vtk(self):
+        stats = mesh_stats(self.volume_mesh_path)
+        self.assertNotIn("error", stats)
+        self.assertEqual(stats.get("topology_kind"), "volumetric")
+        self.assertEqual(stats.get("point_count"), 4)
+        self.assertEqual(stats.get("cell_count"), 1)
+        self.assertIn("bounding_box", stats)
 
 if __name__ == '__main__':
     unittest.main()
