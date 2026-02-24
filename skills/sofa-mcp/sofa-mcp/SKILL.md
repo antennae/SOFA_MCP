@@ -226,5 +226,44 @@ When the user says “I want a scene that …”, follow this loop:
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
       -H "Accept: application/json, text/event-stream" \
-      -d '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"patch_scene","arguments":{"scene_path":"<scene_path>","patch":{"op":"insert_after","anchor":"def createScene(rootNode):","text":"\n    # patched\n"}}}}'
+            -d '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"patch_scene","arguments":{"scene_path":"<scene_path>","patch":{"op":"insert_after","anchor":"def createScene(rootNode):","text":"\n    # patched\n"}}}}'
+          ```
+      
+### 15. `run_and_extract`
+
+*   **Description:** Runs a SOFA simulation for a specified number of steps and extracts data from a specific component field at each step.
+*   **Parameters:**
+    *   `scene_path` (string, required): Path to the SOFA scene Python file.
+    *   `steps` (integer, required): Number of simulation steps to run.
+    *   `dt` (number, required): Time step for the simulation.
+    *   `node_path` (string, required): Path to the node/component (e.g., `/solver_node/mo`).
+    *   `field` (string, required): The field to extract data from (e.g., `position`).
+*   **Returns (shape):**
+    *   On success: `{ "success": true, "data": array }` where `data` is an array of field values for each step.
+    *   On failure: `{ "success": false, "error": string }`
+*   **Usage:**
+    ```bash
+    curl -X POST http://127.0.0.1:8000/mcp \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json, text/event-stream" \
+    -d '{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"run_and_extract","arguments":{"scene_path":"cantilever_beam.py","steps":5,"dt":0.01,"node_path":"/solver_node/mo","field":"position"}}}'
+    ```
+
+### 16. `update_data_field`
+
+*   **Description:** Updates a specific field of a SOFA object in a Python scene file. This tool parses the Python code to locate the object by name and safely updates or inserts the field value, preserving the rest of the file structure.
+*   **Parameters:**
+    *   `scene_path` (string, required): Path to the SOFA scene Python file.
+    *   `object_name` (string, required): The `name` of the object to target (e.g., `mo`).
+    *   `field_name` (string, required): The argument/field to update (e.g., `position`).
+    *   `new_value` (any, required): The new value for the field (string, number, list, etc.).
+*   **Returns (shape):**
+    *   On success: `{ "success": true, "message": string }`
+    *   On failure: `{ "success": false, "error": string }`
+*   **Usage:**
+    ```bash
+    curl -X POST http://127.0.0.1:8000/mcp \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
+      -d '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"update_data_field","arguments":{"scene_path":"scene.py","object_name":"mo","field_name":"totalMass","new_value":5.0}}}'
     ```

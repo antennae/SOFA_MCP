@@ -83,9 +83,23 @@ End-to-end (agentic workflows)
 - "I want a SOFA scene with a cantilever beam, fixed at one end, with gravity added. generate the scene, validate it, summarize and write it to cantilever_beam.py"
 
 3) Natural language -> preflight mesh -> validated scene (stub)
-- "I want a scene that will eventually use meshes/prostate.vtk. First preflight the mesh (resolve path + stats). "
+- "I want a SOFA scene that will use meshes/prostate.vtk. First preflight the mesh (resolve path + stats). "
 - "Add volumetric mesh as Tetrahedron element, fix at the bottom, validate, summarize and write to prostate.py"
 - "based on prostate.py, add the internal chamber using inner_*.stl, internal chamber can be pressurized, validate, summarize, write it to prostate_chamber.py if successful"
 
 4) Natural language to edit a scene.
 - "based on cantilever_beam.py, add a force at the free end of the beam for support. validate, summarize, write it to beam_support.py if successful"
+
+5) Read the data
+I'm working on MCP, with @skills/sofa-mcp/sofa-mcp/SKILL.md as skill list, start mcp server,
+Use the run_and_extract tool on cantilever_base.py. Just give me the first 5 values of the tip displacement
+
+6) Read the data and make adjust to match
+I'm working on MCP, with @skills/sofa-mcp/sofa-mcp/SKILL.md as skill list, start mcp server,
+I want to calibrate the cantilever_beam.py scene.
+First, load the scene and get the node of the tip (free end) and remember.
+Use run_and_extract to get the 'position' of the tip node over 500 steps.
+Calculate the tip vertical displacement.
+If the displacement is greater than 10mm, use update_data_field to incresase the youngModulus of the FEM component to make it stiffer.
+If it is less than 10mm, decrease the youngModulus.
+Run the extraction one more time after the update to confirm the new displacement.

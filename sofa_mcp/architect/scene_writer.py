@@ -40,6 +40,9 @@ def add_solver(
     solver_node.addObject(
         "EulerImplicitSolver",
         firstOrder=False,
+        rayleighStiffness=0.1,
+        rayleighMass=0.1,
+        vdamping=0.1,
     )
     solver_node.addObject(
         "SparseLDLSolver",

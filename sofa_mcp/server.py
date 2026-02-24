@@ -9,9 +9,23 @@ import sofa_mcp.architect.mesh_inspector as mesh_inspector
 import sofa_mcp.architect.math_sandbox as math_sandbox
 import sofa_mcp.architect.component_query as component_query
 import sofa_mcp.architect.scene_writer as scene_writer
+import sofa_mcp.observer.stepping as stepping
+import sofa_mcp.optimizer.patcher as patcher
 
 # Create the MCP server instance
 mcp = FastMCP("SOFA Sim2Real MCP")
+
+@mcp.tool()
+def update_data_field(scene_path: str, object_name: str, field_name: str, new_value) -> dict:
+    """Updates a specific field of a SOFA object in a Python scene file."""
+    return patcher.update_data_field(scene_path, object_name, field_name, new_value)
+
+
+@mcp.tool()
+def run_and_extract(scene_path: str, steps: int, dt: float, node_path: str, field: str) -> dict:
+    """Runs a SOFA simulation and extracts data from a specified field at each step."""
+    return stepping.run_and_extract(scene_path, steps, dt, node_path, field)
+
 
 
 @mcp.tool()
