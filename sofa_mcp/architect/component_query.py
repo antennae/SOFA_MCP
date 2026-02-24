@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any, Dict, List
 
+import os
 import re
 import types
 
@@ -10,6 +11,24 @@ import Sofa.Core
 
 
 _AUTO_IMPORTED_PLUGINS = False
+_MIN_COMPONENT_REGISTRY_SIZE = 50
+
+
+def _get_object_factory_instance(factory: Any) -> Any:
+    """Return an ObjectFactory instance-like object.
+
+    Some SOFA Python builds expose ObjectFactory as a singleton with getInstance();
+    others expose a static/pybind type directly. This helper avoids peppering the
+    codebase with fragile hasattr(..., "getInstance") checks.
+    """
+
+    try:
+        get_instance = getattr(factory, "getInstance", None)
+        if callable(get_instance):
+            return get_instance()
+    except Exception:
+        pass
+    return factory
 
 
 def _extract_class_names_from_entries(entries: Any) -> List[str]:
@@ -69,22 +88,101 @@ def _maybe_auto_import_component_plugins(core: Any) -> None:
         _AUTO_IMPORTED_PLUGINS = True
         return
 
-    # Keep this list small; more can be loaded explicitly by the user scene.
-    for plugin_name in (
-        "Sofa.Component.Topology",
-        "Sofa.Component.IO.Mesh",
-        "Sofa.Component.LinearSolver",
-        "Sofa.Component.ODESolver",
-        "Sofa.Component.StateContainer",
-        "Sofa.Component.Mapping",
-        "Sofa.Component.Mass",
-    ):
+    def discover_plugins_from_sofa_root() -> List[str]:
+        sofa_root = os.environ.get("SOFA_ROOT")
+        if not sofa_root:
+            return []
+
+        lib_dirs = [os.path.join(sofa_root, "lib"), os.path.join(sofa_root, "build", "lib")]
+        plugins: set[str] = set()
+        for lib_dir in lib_dirs:
+            if not os.path.isdir(lib_dir):
+                continue
+            try:
+                for filename in os.listdir(lib_dir):
+                    # Prefer unversioned .so files; those map cleanly to importPlugin names.
+                    if not (filename.startswith("lib") and filename.endswith(".so")):
+                        continue
+                    plugins.add(filename[len("lib") : -len(".so")])
+            except Exception:
+                continue
+
+        return sorted(plugins)
+
+    discovered = discover_plugins_from_sofa_root()
+
+    # Import all available Sofa.Component.* modules (and the umbrella module, if present)
+    # so component search can cover the full build rather than a tiny default registry.
+    plugin_names: List[str] = []
+    if "Sofa.Component" in discovered:
+        plugin_names.append("Sofa.Component")
+
+    plugin_names.extend([p for p in discovered if p.startswith("Sofa.Component.")])
+
+    # Also import popular external plugins if they are built.
+    plugin_names.extend([p for p in discovered if p.startswith("SoftRobots")])
+
+    # Allow user to force-add plugins via env var (comma-separated names).
+    extra = os.environ.get("SOFA_MCP_AUTOIMPORT_PLUGINS", "").strip()
+    if extra:
+        plugin_names.extend([p.strip() for p in extra.split(",") if p.strip()])
+
+    # De-dupe while preserving order.
+    seen: set[str] = set()
+    ordered_plugins: List[str] = []
+    for p in plugin_names:
+        if p in seen:
+            continue
+        seen.add(p)
+        ordered_plugins.append(p)
+
+    for plugin_name in ordered_plugins:
         try:
             SofaRuntime.importPlugin(plugin_name)
         except Exception:
             pass
 
     _AUTO_IMPORTED_PLUGINS = True
+
+
+def _collect_component_names_from_factory(instance: Any) -> List[str]:
+    """Collect registered class names from the SOFA ObjectFactory binding."""
+
+    # Prefer explicit name enumeration if present.
+    for method_name in (
+        "getClassNames",
+        "getAllObjectClassNames",
+        "getRegisteredObjectNames",
+        "getObjectClassNames",
+    ):
+        try:
+            method = getattr(instance, method_name, None)
+            if callable(method):
+                names = method()
+                if names:
+                    return [str(n) for n in names]
+        except Exception:
+            continue
+
+    # Common in recent SOFA builds: ObjectFactory.components -> List[ClassEntry].
+    names = _extract_class_names_from_entries(getattr(instance, "components", None))
+
+    # Some builds also expose components per target.
+    targets = getattr(instance, "targets", None)
+    if isinstance(targets, (list, tuple, set, frozenset)) and hasattr(instance, "getComponentsFromTarget"):
+        combined: List[str] = []
+        for target in targets:
+            try:
+                combined.extend(
+                    _extract_class_names_from_entries(instance.getComponentsFromTarget(target))
+                )
+            except Exception:
+                continue
+        if combined:
+            names.extend(combined)
+
+    # De-dupe while preserving deterministic ordering.
+    return sorted({str(n) for n in names if n})
 
 
 def query_sofa_component(component_name: str) -> dict:
@@ -148,68 +246,19 @@ def _try_get_registered_component_names() -> List[str]:
     factory = getattr(core, "ObjectFactory", None)
     if factory is not None:
         try:
-            instance = factory.getInstance() if hasattr(factory, "getInstance") else factory
-            for method_name in (
-                "getClassNames",
-                "getAllObjectClassNames",
-                "getRegisteredObjectNames",
-                "getObjectClassNames",
-            ):
-                if hasattr(instance, method_name):
-                    names = getattr(instance, method_name)()
-                    if names:
-                        return [str(n) for n in names]
+            instance = _get_object_factory_instance(factory)
+            names = _collect_component_names_from_factory(instance)
+            if len(names) >= _MIN_COMPONENT_REGISTRY_SIZE:
+                return names
 
-            # Common in recent SOFA builds: a list of ClassEntry objects.
-            names = _extract_class_names_from_entries(getattr(instance, "components", None))
-            if names:
-                # Some builds only have a tiny default registry until component
-                # libraries are explicitly imported. If the list is suspiciously
-                # small, try a best-effort auto-import and re-read.
-                if len(names) >= 50:
-                    return names
-
-                _maybe_auto_import_component_plugins(core)
-                refreshed = _extract_class_names_from_entries(getattr(instance, "components", None))
-                if refreshed and len(refreshed) >= len(names):
-                    names = refreshed
-
-                if len(names) >= 50:
-                    return names
-
-            # Some builds expose components per-target.
-            targets = getattr(instance, "targets", None)
-            if isinstance(targets, (list, tuple, set)) and hasattr(instance, "getComponentsFromTarget"):
-                combined: List[str] = []
-                for target in targets:
-                    try:
-                        combined.extend(
-                            _extract_class_names_from_entries(instance.getComponentsFromTarget(target))
-                        )
-                    except Exception:
-                        continue
-                if combined:
-                    if len(combined) >= 50:
-                        return combined
-
-                    _maybe_auto_import_component_plugins(core)
-                    refreshed_combined: List[str] = []
-                    for target in targets:
-                        try:
-                            refreshed_combined.extend(
-                                _extract_class_names_from_entries(instance.getComponentsFromTarget(target))
-                            )
-                        except Exception:
-                            continue
-
-                    if refreshed_combined and len(refreshed_combined) >= len(combined):
-                        combined = refreshed_combined
-
-                    if len(combined) >= 50:
-                        return combined
-
-                    # Even if still small, return what we have.
-                    return combined
+            # Some builds only have a tiny default registry until component
+            # libraries are explicitly imported. Try a best-effort import and retry.
+            _maybe_auto_import_component_plugins(core)
+            refreshed = _collect_component_names_from_factory(instance)
+            if len(refreshed) >= _MIN_COMPONENT_REGISTRY_SIZE:
+                return refreshed
+            if refreshed:
+                return refreshed
         except Exception:
             pass
 
@@ -224,31 +273,6 @@ def _try_get_registered_component_names() -> List[str]:
                         return [str(n) for n in names]
         except Exception:
             pass
-
-    # As a last resort, try importing a minimal set of component libraries and retry.
-    _maybe_auto_import_component_plugins(core)
-
-    try:
-        factory = getattr(core, "ObjectFactory", None)
-        if factory is None:
-            return []
-        instance = factory.getInstance() if hasattr(factory, "getInstance") else factory
-        names = _extract_class_names_from_entries(getattr(instance, "components", None))
-        if names:
-            return names
-
-        targets = getattr(instance, "targets", None)
-        if isinstance(targets, (list, tuple, set)) and hasattr(instance, "getComponentsFromTarget"):
-            combined: List[str] = []
-            for target in targets:
-                try:
-                    combined.extend(_extract_class_names_from_entries(instance.getComponentsFromTarget(target)))
-                except Exception:
-                    continue
-            if combined:
-                return combined
-    except Exception:
-        pass
 
     return []
 
