@@ -4,6 +4,7 @@ import sys
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
+from typing import Any
 from fastmcp import FastMCP
 import sofa_mcp.architect.mesh_inspector as mesh_inspector
 import sofa_mcp.architect.math_sandbox as math_sandbox
@@ -39,6 +40,18 @@ def process_simulation_data(
     """Processes a simulation data file to extract a subset of results or calculate metrics (displacement, stability)."""
     return stepping.process_simulation_data(file_path, start_step, end_step, indices, calculate_metrics, include_data)
 
+
+
+@mcp.tool()
+def find_indices_by_region(
+    file_path: str,
+    axis: str,
+    mode: str,
+    value: Any = None,
+    tolerance: float = 1e-5
+) -> dict:
+    """Finds vertex indices based on spatial criteria (min, max, range) along an axis."""
+    return mesh_inspector.find_indices_by_region(file_path, axis, mode, value, tolerance)
 
 
 @mcp.tool()

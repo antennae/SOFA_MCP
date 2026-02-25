@@ -8,9 +8,11 @@ such as bounding boxes.
 
 import os
 import math
+import json
 from typing import Any, Dict, List, Optional, Tuple
 
 import trimesh
+import numpy as np
 
 
 def resolve_asset_path(path: str) -> dict:
@@ -247,3 +249,106 @@ def mesh_stats(mesh_path: str) -> dict:
             pass
 
     return stats
+
+
+def find_indices_by_region(
+    file_path: str,
+    axis: str,
+    mode: str,
+    value: Any = None,
+    tolerance: float = 1e-5
+) -> dict:
+    """
+    Finds vertex indices based on spatial criteria.
+    Works on mesh files (STL, VTK, etc.) or simulation result JSON files.
+
+    Args:
+        file_path: Path to the mesh or simulation JSON file.
+        axis: 'x', 'y', or 'z'.
+        mode: 'min', 'max', or 'range'.
+        value: For 'range' mode, a list [min, max].
+        tolerance: Distance tolerance for 'min' and 'max' modes.
+
+    Returns:
+        A dictionary containing:
+            - success: Boolean.
+            - indices: List of matching vertex indices.
+            - count: Number of matching vertices.
+            - error: Error message (if failed).
+    """
+    resolved = resolve_asset_path(file_path)
+    if not resolved.get("exists"):
+        return {"success": False, "error": f"File not found: {file_path}"}
+
+    path = resolved["path"]
+    points = None
+
+    # 1. Load points
+    ext = os.path.splitext(path)[1].lower()
+    if ext == ".json":
+        try:
+            with open(path, "r") as f:
+                content = json.load(f)
+            data = content.get("data", [])
+            if not data:
+                return {"success": False, "error": "No data found in JSON."}
+            # Use the first step for index discovery
+            first_step = data[0]
+            if isinstance(first_step, list) and len(first_step) > 0 and isinstance(first_step[0], list):
+                points = np.array(first_step)
+            else:
+                return {"success": False, "error": "JSON data format not compatible with vertex search."}
+        except Exception as e:
+            return {"success": False, "error": f"Failed to parse JSON: {str(e)}"}
+    elif ext == ".vtk":
+        pts, _, _ = _vtk_ascii_parse_points_and_cells(path)
+        if pts:
+            points = np.array(pts)
+    else:
+        try:
+            mesh = trimesh.load(path)
+            if hasattr(mesh, "vertices"):
+                points = mesh.vertices
+            elif isinstance(mesh, trimesh.Scene):
+                # Flatten all geometries into a single point cloud for search
+                all_pts = []
+                for g in mesh.geometry.values():
+                    if hasattr(g, "vertices"):
+                        all_pts.append(g.vertices)
+                if all_pts:
+                    points = np.concatenate(all_pts, axis=0)
+        except Exception as e:
+            return {"success": False, "error": f"Failed to load mesh: {str(e)}"}
+
+    if points is None:
+        return {"success": False, "error": "Could not extract vertices from file."}
+
+    # 2. Filter points
+    axis_map = {'x': 0, 'y': 1, 'z': 2}
+    if axis.lower() not in axis_map:
+        return {"success": False, "error": f"Invalid axis: {axis}"}
+    
+    ax_idx = axis_map[axis.lower()]
+    coords = points[:, ax_idx]
+    
+    matching_indices = []
+    if mode == 'min':
+        min_val = np.min(coords)
+        matching_indices = np.where(np.abs(coords - min_val) <= tolerance)[0]
+    elif mode == 'max':
+        max_val = np.max(coords)
+        matching_indices = np.where(np.abs(coords - max_val) <= tolerance)[0]
+    elif mode == 'range':
+        if not isinstance(value, (list, tuple)) or len(value) != 2:
+            return {"success": False, "error": "For 'range' mode, value must be [min, max]."}
+        matching_indices = np.where((coords >= value[0]) & (coords <= value[1]))[0]
+    else:
+        return {"success": False, "error": f"Invalid mode: {mode}"}
+
+    return {
+        "success": True,
+        "axis": axis,
+        "mode": mode,
+        "indices": matching_indices.tolist(),
+        "count": len(matching_indices)
+    }

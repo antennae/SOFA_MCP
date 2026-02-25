@@ -127,3 +127,28 @@ Run the extraction one more time after the update to confirm the new displacemen
 9. Tests step slicing
 - "Run a simulation of cantilever_beam.py for 50 steps. I only care about the transient behavior at the very beginning. Use
   process_simulation_data to extract only the first 5 steps of the position field."
+
+10. Spatial Discovery & Targeted Stability
+- "Find the indices of the fixed end of the beam (min X) from the latest simulation results. Then, use process_simulation_data to verify that
+the max_displacement_magnitude for those specific indices is essentially zero."
+
+
+11. High-Precision Tip Analysis
+- "Identify all vertices at the very tip of the beam (max X). Use process_simulation_data on just the last index of that list to tell me the
+stability_measure and whether that point has converged after 1000 steps."
+
+
+12. Cross-Axis Boundary Check
+- "Find the indices of the vertices on the 'bottom' edge of the beam (min Y). Run a 50-step simulation and show me the net_displacement_vector
+for those indices to see how the bottom of the beam is compressing or stretching."
+
+
+13. Parameter Sensitivity Test (The "Full Loop")
+- "Use update_data_field to change the Young's Modulus (youngModulus) of the fem component in cantilever_beam.py to 500.0. Run it for 1000 steps,
+find the tip indices, and tell me the final Y-displacement of the tip. Compare this to the ~14mm we saw earlier with the original modulus. then 
+change the Young's Modulus back"
+
+
+14. Memory Efficiency Test
+- "Run the simulation for 500 steps. Use process_simulation_data with include_data=True for only vertex 89 and only steps 200 to 210. This
+should return a tiny array even though the simulation is large."

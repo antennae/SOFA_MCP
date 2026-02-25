@@ -290,3 +290,22 @@ When the user says “I want a scene that …”, follow this loop:
       -H "Accept: application/json, text/event-stream" \
       -d '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"update_data_field","arguments":{"scene_path":"scene.py","object_name":"mo","field_name":"totalMass","new_value":5.0}}}'
     ```
+
+### 18. `find_indices_by_region`
+
+*   **Description:** Finds vertex indices in a mesh (STL, VTK) or simulation JSON based on spatial criteria (min, max, or range) along a specific axis (x, y, or z). Useful for identifying tip vertices or fixed boundary indices.
+*   **Parameters:**
+    *   `file_path` (string, required): Path to the mesh or simulation JSON file.
+    *   `axis` (string, required): 'x', 'y', or 'z'.
+    *   `mode` (string, required): 'min', 'max', or 'range'.
+    *   `value` (any, optional): Required for 'range' mode as `[min, max]`.
+    *   `tolerance` (number, optional): Distance tolerance for matching (default: 1e-5).
+*   **Returns (shape):**
+    *   On success: `{ "success": true, "indices": number[], "count": number, "axis": string, "mode": string }`
+*   **Usage:**
+    ```bash
+    curl -X POST http://127.0.0.1:8000/mcp \
+      -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
+      -d '{"jsonrpc":"2.0","id":18,"method":"tools/call","params":{"name":"find_indices_by_region","arguments":{"file_path":"prostate.stl","axis":"z","mode":"max"}}}'
+    ```
