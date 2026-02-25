@@ -152,3 +152,21 @@ change the Young's Modulus back"
 14. Memory Efficiency Test
 - "Run the simulation for 500 steps. Use process_simulation_data with include_data=True for only vertex 89 and only steps 200 to 210. This
 should return a tiny array even though the simulation is large."
+
+15. The "Picky Component" Test 
+- "Test the new query_sofa_component by querying TetrahedronFEMForceField. This component usually fails because it needs a specific plugin and a
+  MechanicalObject to exist first. Verify that the tool now 'repairs' the query context and shows you the component's links and data fields
+  anyway."
+
+
+16. The "Lost MechanicalObject" Test
+- "Generate a script_content where you add a MechanicalObject to the root node instead of the parent_node (e.g., parent_node.getRoot().addObject('MechanicalObject', name='ghost_mo')). Run summarize_scene and verify that health_warnings identifies it has no Solver in its ancestry."
+
+
+17. The "ForceField Registry" Test 
+- "Query the TetrahedronFEMForceField using query_sofa_component to confirm the repair logic works for introspection. Then, in a separate step, explain why summarize_scene fails on this component if dependencies are missing (it's a hard creation error in SOFA)."
+
+
+18. The "Path Finder" Test 
+- "Generate a complex scene with nested nodes (e.g., a 'prostate' node containing a 'surface' child node). Use summarize_scene to verify that
+  every object now has an absolute Unix-style path (like /root/prostate/surface/mo)."
