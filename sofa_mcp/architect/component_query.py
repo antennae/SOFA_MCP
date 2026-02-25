@@ -1,4 +1,3 @@
-
 from __future__ import annotations
 
 from typing import Any, Dict, List
@@ -191,39 +190,108 @@ def query_sofa_component(component_name: str) -> dict:
     data fields, default values, and Python bindings.
     """
     try:
-        # In SOFA, components are often created within a node.
-        # We may not be able to get all info without a running simulation,
-        # but we can try to inspect the class.
-        # The following is a conceptual implementation.
-        # The actual SOFA API might differ.
+        import SofaRuntime
+        
+        # Ensure common base plugins are loaded so we can build a valid context
+        base_plugins = [
+            "Sofa.Component.StateContainer",
+            "Sofa.Component.Topology.Container.Constant",
+            "Sofa.Component.Topology.Container.Dynamic",
+            "Sofa.Component.Visual",
+            "Sofa.GL.Component.Rendering3D"
+        ]
+        for p in base_plugins:
+            try:
+                SofaRuntime.importPlugin(p)
+            except:
+                pass
 
-        # This is a placeholder for where you'd use the SOFA API
-        # to get component information.
-        # For example, if Sofa.Core had a component registry:
-        # if not Sofa.Core.has_component(component_name):
-        #     return {"error": f"Component '{component_name}' not found."}
+        # 1. Prepare a dummy context with common dependencies
+        root = Sofa.Core.Node("registryQueryNode")
+        root.addObject("MechanicalObject", template="Vec3d", name="dummy_mstate")
+        # Add a few common topology containers
+        root.addObject("TetrahedronSetTopologyContainer", name="dummy_tet_topology")
+        root.addObject("TriangleSetTopologyContainer", name="dummy_tri_topology")
         
-        # The ability to inspect data fields without a running scene depends on the
-        # SOFA Python3 bindings. A common way is to create a temporary node and object.
+        # We use a child node for the target component so it can definitely see 
+        # siblings/parents for link resolution.
+        child = root.addChild("targetNode")
         
-        root = Sofa.Core.Node("rootNode")
-        component = root.addObject(component_name)
-        
-        if not component:
-            return {"error": f"Could not create an instance of {component_name}."}
+        def try_create(node, name, template=None):
+            try:
+                if template:
+                    return node.addObject(name, template=template)
+                return node.addObject(name)
+            except Exception as e:
+                return e
 
+        res = try_create(child, component_name)
+        
+        # 2. Diagnose failure and attempt specific repairs
+        if isinstance(res, Exception):
+            err_msg = str(res)
+            
+            # Case A: Missing Plugin
+            plugin_match = re.search(r"<RequiredPlugin name='([^']+)'/>", err_msg)
+            if plugin_match:
+                plugin_name = plugin_match.group(1)
+                try:
+                    SofaRuntime.importPlugin(plugin_name)
+                    res = try_create(child, component_name) # Retry
+                except:
+                    pass
+
+            # Case B: Still failing with template/context error
+            if isinstance(res, Exception) and ("template" in str(res).lower() or "mstate" in str(res).lower() or "topology" in str(res).lower()):
+                # Try forcing a common template
+                res = try_create(child, component_name, template="Vec3d")
+
+        # If it still failed, return the error with hints
+        if isinstance(res, Exception):
+            error_text = str(res)
+            hints = []
+            if "mstate" in error_text.lower():
+                hints.append("This component requires a MechanicalObject (mstate) in its context.")
+            if "topology" in error_text.lower():
+                hints.append("This component requires a TopologyContainer (e.g. TetrahedronSetTopologyContainer).")
+            if "factory" in error_text.lower() and "plugin" not in error_text.lower():
+                hints.append("The component name might be misspelled or the plugin is not loaded.")
+            
+            return {
+                "error": f"Could not create an instance of {component_name} for inspection.",
+                "details": error_text,
+                "hints": hints,
+                "success": False
+            }
+
+        component = res
         data_fields = {}
         for data in component.getDataFields():
             data_fields[data.getName()] = {
                 "type": data.getValueTypeString(),
                 "value": str(data.getValue()),
-                "help": data.getHelp(),
+                "help": str(data.getHelp()),
             }
+
+        links = []
+        for link in component.getLinks():
+            is_multi = False
+            if hasattr(link, "isMultiLink"):
+                prop = getattr(link, "isMultiLink")
+                is_multi = prop() if callable(prop) else bool(prop)
+            
+            links.append({
+                "name": link.getName(),
+                "help": str(link.getHelp()),
+                "is_multi": is_multi
+            })
 
         return {
             "name": component.getName(),
             "class_name": component.getClassName(),
             "data_fields": data_fields,
+            "links": links,
+            "success": True
         }
 
     except ImportError:
