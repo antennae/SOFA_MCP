@@ -5,6 +5,7 @@ Independent (single-skill)
 ============================
 
 1) Start server
+- I'm working on MCP, with @skills/sofa-mcp/sofa-mcp/SKILL.md as skill list, start mcp server
 - "Start the SOFA MCP server and confirm it’s reachable. Don’t run any other tools yet."
 
 2) Math sandbox
@@ -170,3 +171,22 @@ should return a tiny array even though the simulation is large."
 18. The "Path Finder" Test 
 - "Generate a complex scene with nested nodes (e.g., a 'prostate' node containing a 'surface' child node). Use summarize_scene to verify that
   every object now has an absolute Unix-style path (like /root/prostate/surface/mo)."
+
+19. Simple Batch Plugin Discovery
+- "I'm creating a basic SOFA scene and I plan to use MechanicalObject, UniformMass, and EulerImplicitSolver. What plugins do I need to import?"
+- "I'm creating a basic SOFA scene and I plan to use SurfacePressureActuator. What plugins do I need to import?"
+- Find the required plugins for `EulerImplicitSolver` and `AnisotropicForceField`. For this check, assume a context where a MechanicalObject
+     templated on `Vec2d` is present.
+- Get the required plugins for the following list of SOFA components: EulerImplicitSolver, CGLinearSolver, MechanicalObject, and
+   TetrahedronFEMForceField.
+
+20. Query with context
+- Query the `HexahedronFEMForceField` component.
+  (should observe an error message containing hints about missing topology)  -  no actually it just worked
+- Query the `HexahedronFEMForceField` component, and ensure the context includes a `HexahedronSetTopologyContainer` named `my_hexa_topo`.
+
+21. Query with context
+- Query the `BeamFEMForceField` component. Use `Rigid3d` as the template and ensure the context includes a `MechanicalObject` named `mstate`
+     with the `Rigid3d` template, and a `BeamAdapter` named `beam_adapter`.
+
+22. Required plugin discovery

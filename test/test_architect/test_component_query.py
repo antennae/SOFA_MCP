@@ -31,11 +31,13 @@ class TestComponentQuery(unittest.TestCase):
         """
         mock_node = MagicMock()
         mock_sofa_core.Node.return_value = mock_node
-        mock_node.addObject.return_value = None
+        # Mock child node's addObject to return Exception
+        mock_child = mock_node.addChild.return_value
+        mock_child.addObject.side_effect = Exception("Component not found")
 
         result = query_sofa_component("NonExistentComponent")
         self.assertIn("error", result)
-        self.assertEqual(result["error"], "Could not create an instance of NonExistentComponent.")
+        self.assertEqual(result["error"], "Could not create an instance of NonExistentComponent for inspection.")
 
     @patch('sofa_mcp.architect.component_query.Sofa.Core')
     def test_query_sofa_component_success(self, mock_sofa_core):
@@ -54,10 +56,13 @@ class TestComponentQuery(unittest.TestCase):
         mock_data_field.getHelp.return_value = "A test data field."
 
         mock_component.getDataFields.return_value = [mock_data_field]
+        mock_component.getLinks.return_value = []
 
         mock_node = MagicMock()
         mock_sofa_core.Node.return_value = mock_node
-        mock_node.addObject.return_value = mock_component
+        # Mock child node's addObject to return the component
+        mock_child = mock_node.addChild.return_value
+        mock_child.addObject.return_value = mock_component
 
         # Call the function
         result = query_sofa_component("MyComponent")
@@ -109,6 +114,33 @@ class TestComponentQuery(unittest.TestCase):
         mock_sofa_core.ObjectFactory.getInstance.return_value.getClassNames.return_value = []
         result = search_sofa_components("anything")
         self.assertIn("error", result)
+
+    @patch('sofa_mcp.architect.component_query.Sofa.Core')
+    def test_query_with_context_and_template(self, mock_sofa_core):
+        """
+        Test that context_components and template are correctly used.
+        """
+        mock_node = MagicMock()
+        mock_sofa_core.Node.return_value = mock_node
+        mock_child = mock_node.addChild.return_value
+        
+        mock_component = MagicMock()
+        mock_component.getName.return_value = "TestComp"
+        mock_component.getClassName.return_value = "TestComp"
+        mock_component.getDataFields.return_value = []
+        mock_component.getLinks.return_value = []
+        mock_child.addObject.return_value = mock_component
+
+        context = [{"type": "HexahedronSetTopologyContainer", "name": "topo"}]
+        result = query_sofa_component("TestComp", template="Vec3d", context_components=context)
+        
+        # Verify context components were added to root node
+        mock_node.addObject.assert_any_call("HexahedronSetTopologyContainer", name="topo")
+        
+        # Verify target component was added to child node with template
+        mock_child.addObject.assert_called_with("TestComp", template="Vec3d")
+        
+        self.assertTrue(result["success"])
 
 if __name__ == '__main__':
     unittest.main()

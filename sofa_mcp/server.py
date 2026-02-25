@@ -124,9 +124,9 @@ def run_math_script(script: str) -> str:
 
 
 @mcp.tool()
-def query_sofa_component(component_name: str) -> dict:
+def query_sofa_component(component_name: str, template: str = None, context_components: list[dict] = None) -> dict:
     """Queries the SOFA component registry for a component."""
-    return component_query.query_sofa_component(component_name)
+    return component_query.query_sofa_component(component_name, template=template, context_components=context_components)
 
 
 @mcp.tool()
@@ -135,7 +135,20 @@ def search_sofa_components(query: str, limit: int = 50) -> dict:
     return component_query.search_sofa_components(query, limit=limit)
 
 
+@mcp.tool()
+def get_plugins_for_components(component_names: list[str], context_components: list[dict] = None) -> dict[str, str]:
+    """
+    For a list of SOFA component names, returns a mapping to their required plugins.
+    """
+    return component_query.get_plugins_for_components(component_names, context_components=context_components)
+
+
 if __name__ == "__main__":
+    from sofa_mcp.architect.plugin_cache import generate_and_save_plugin_map
+    print("Pre-generating SOFA component plugin cache...")
+    generate_and_save_plugin_map()
+    print("...cache generation complete.")
+
     print("Starting SOFA Sim2Real MCP server...")
     mcp.run(
         transport="streamable-http",
