@@ -98,8 +98,9 @@ Use the run_and_extract tool on cantilever_base.py. Just give me the first 5 val
 I'm working on MCP, with @skills/sofa-mcp/sofa-mcp/SKILL.md as skill list, start mcp server,
 I want to calibrate the cantilever_beam.py scene.
 First, load the scene and get the node of the tip (free end) and remember.
-Use run_and_extract to get the 'position' of the tip node over 500 steps.
+Use run_and_extract to get the 'position' of the tip node over 1000 steps.
 Calculate the tip vertical displacement.
 If the displacement is greater than 10mm, use update_data_field to incresase the youngModulus of the FEM component to make it stiffer.
 If it is less than 10mm, decrease the youngModulus.
+Update youngModulus so that the displacement is close to 10mm (with tolerance of 0.1mm)
 Run the extraction one more time after the update to confirm the new displacement.
