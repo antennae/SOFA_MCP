@@ -61,6 +61,13 @@ gemini skills install sofa-mcp.skill --scope user
 
 *(Replace `sofa-mcp.skill` with the actual path to your packaged skill file if it's not in the current directory.)*
 
+combined with packaging command to update and install in one step:
+
+```bash
+node /home/sizhe/.nvm/versions/node/v24.5.0/lib/node_modules/@google/gemini-cli/node_modules/@google/gemini-cli-core/dist/src/skills/builtin/skill-creator/scripts/package_skill.cjs skills/sofa-mcp/sofa-mcp
+gemini skills install sofa-mcp.skill --scope workspace
+```
+
 ---
 
 ### 5. Reload Skills (User Action Required)
