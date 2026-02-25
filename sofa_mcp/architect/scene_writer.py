@@ -205,6 +205,13 @@ def _safe_class_name(obj):
         pass
     return obj.__class__.__name__
 
+def _get_template(obj):
+    try:
+        # Many SOFA objects have a 'template' data field
+        return str(obj.getData('template').getValue())
+    except:
+        return None
+
 def summarize():
     root = Sofa.Core.Node("root")
     try:
@@ -220,7 +227,6 @@ def summarize():
         mechanical_object_count = 0
         solver_node_exists = False
         user_object_count = 0
-        baseline_missing = []
 
         solver_node = root.getChild('solver_node')
         if solver_node is not None:
@@ -229,35 +235,6 @@ def summarize():
         # Baseline components added by add_header/add_solver
         animation_loop_obj = root.getObject('AnimationLoop')
         constraint_solver_obj = root.getObject('ConstraintSolver')
-        if animation_loop_obj is None:
-            baseline_missing.append("FreeMotionAnimationLoop (name='AnimationLoop')")
-        if constraint_solver_obj is None:
-            baseline_missing.append("NNCGConstraintSolver (name='ConstraintSolver')")
-
-        if solver_node is None:
-            baseline_missing.append("Child node 'solver_node'")
-        else:
-            # Ensure solver baseline objects exist
-            try:
-                objs = getattr(solver_node, 'objects', [])
-            except Exception:
-                objs = []
-            solver_classes = set()
-            for obj in objs:
-                try:
-                    if hasattr(obj, 'getClassName'):
-                        solver_classes.add(obj.getClassName())
-                    else:
-                        solver_classes.add(obj.__class__.__name__)
-                except Exception:
-                    pass
-
-            if 'EulerImplicitSolver' not in solver_classes:
-                baseline_missing.append("EulerImplicitSolver (in solver_node)")
-            if solver_node.getObject('Solver') is None:
-                baseline_missing.append("SparseLDLSolver (name='Solver')")
-            if solver_node.getObject('ConstraintCorrection') is None:
-                baseline_missing.append("GenericConstraintCorrection (name='ConstraintCorrection')")
 
         for node, path in _iter_nodes(root, "/root"):
             try:
@@ -269,7 +246,8 @@ def summarize():
             for obj in getattr(node, 'objects', []):
                 class_name = _safe_class_name(obj)
                 obj_name = _safe_obj_name(obj)
-                objects.append({"class": class_name, "name": obj_name})
+                template = _get_template(obj)
+                objects.append({"class": class_name, "name": obj_name, "template": template})
 
                 object_count += 1
                 class_counts[class_name] = class_counts.get(class_name, 0) + 1
@@ -283,27 +261,9 @@ def summarize():
             nodes.append({"path": path, "name": node_name, "objectCount": len(objects), "objects": objects})
 
         checks = []
-        checks.append({"name": "has_animation_loop", "passed": animation_loop_obj is not None, "detail": "Found AnimationLoop" if animation_loop_obj is not None else "Missing FreeMotionAnimationLoop (name='AnimationLoop')"})
-        checks.append({"name": "has_constraint_solver", "passed": constraint_solver_obj is not None, "detail": "Found ConstraintSolver" if constraint_solver_obj is not None else "Missing NNCGConstraintSolver (name='ConstraintSolver')"})
-
-        if not solver_node_exists:
-            checks.append({"name": "has_solver_node", "passed": False, "detail": "Missing child node 'solver_node'"})
-        else:
-            checks.append({"name": "has_solver_node", "passed": True, "detail": "Found child node 'solver_node'"})
-
-        # This mirrors validation's baseline component checks.
-        checks.append({"name": "baseline_components_present", "passed": len(baseline_missing) == 0, "detail": "OK" if len(baseline_missing) == 0 else ("Missing: " + "; ".join(baseline_missing))})
-
-        if mechanical_object_count > 0:
-            checks.append({"name": "has_mechanical_object", "passed": True, "detail": "Found %d MechanicalObject" % mechanical_object_count})
-        else:
-            checks.append({"name": "has_mechanical_object", "passed": False, "detail": "No MechanicalObject found"})
-
-        if solver_node_exists:
-            if user_object_count > 0:
-                checks.append({"name": "has_user_objects", "passed": True, "detail": "Found %d user object(s) under solver_node" % user_object_count})
-            else:
-                checks.append({"name": "has_user_objects", "passed": False, "detail": "No user objects added under solver_node (only baseline solver objects present)"})
+        checks.append({"name": "has_animation_loop", "passed": animation_loop_obj is not None})
+        checks.append({"name": "has_constraint_solver", "passed": constraint_solver_obj is not None})
+        checks.append({"name": "has_solver_node", "passed": solver_node_exists})
 
         summary = {
             "success": True,
