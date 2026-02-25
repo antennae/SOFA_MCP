@@ -14,16 +14,22 @@ This skill starts and interacts with the SOFA Sim2Real MCP server.
 When the user says “I want a scene that …”, follow this loop:
 
 1. **Start server (once):** call `start_sofa_mcp_server` if not already running.
-2. **Clarify only what’s necessary:** if the request is underspecified, ask for the minimum missing details (e.g., geometry source/mesh path, expected material behavior, boundary conditions, what needs to be visualized/controlled).
-3. **Preflight assets/components (when relevant):**
-    - If the scene references a mesh, call `resolve_asset_path` (if needed) and `mesh_stats` to get bounding box + topology + basic counts for scaling/collision choices.
-    - If you are unsure about a SOFA class name, call `search_sofa_components` to find candidates, then `query_sofa_component` to confirm parameters before writing code.
-4. **Generate `script_content`:** produce Python code that defines `add_scene_content(parent_node)` only (no `createScene`), and add SOFA objects under `parent_node`.
-5. **Validate (fast loop):** call `validate_scene(script_content)`.
-6. **Auto-repair on failure:** if validation fails, use the returned error message to patch `script_content` and retry (bounded attempts, e.g. up to 3). Prefer minimal, targeted edits.
-7. **Summarize + verify structure (recommended):** call `summarize_scene(script_content)` and ensure basic checks pass (e.g., a `MechanicalObject` exists, user objects were added).
-8. **Write final file:** once validation succeeds, call `write_scene(script_content, output_filename)`.
-9. **Stop condition:** on success, report the returned output `path` and any warnings.
+2. **Clarify only what’s necessary:** if the request is underspecified, ask for the minimum missing details.
+3. **Component Research & Dependencies:**
+    - Use `query_sofa_component` for **every** new component you plan to use.
+    - Check the returned `links` and `hints`. If it says it requires an `mstate`, ensure you add a `MechanicalObject` in the same node or a parent.
+    - If `query_sofa_component` reports it had to load a plugin, note that plugin name for your `RequiredPlugin` list.
+4. **Generate `script_content` (Safety for LLM):**
+    - **Avoid multi-line JSON escaping issues:** When calling tools with `script_content`, use simple Python strings. If using a model like 2.5 Flash, keep the script concise.
+    - Always define `add_scene_content(parent_node)`.
+    - Group your `RequiredPlugin` calls at the top of `add_scene_content`.
+5. **Validate & Summarize:**
+    - Call `summarize_scene(script_content)` to check the hierarchy **before** full validation.
+    - Pay attention to `health_warnings` in the summary (e.g., missing MOs or Solvers).
+    - Call `validate_scene(script_content)` for a full dry-run.
+6. **Auto-repair on failure:** use error messages and `health_warnings` to patch and retry (bounded attempts, e.g. up to 3).
+7. **Write final file:** once validation succeeds, call `write_scene(script_content, output_filename)`.
+8. **Stop condition:** on success, report the returned output `path` and any warnings.
 
 ## Available Tools
 
@@ -104,9 +110,10 @@ When the user says “I want a scene that …”, follow this loop:
 
 ### 7. `query_sofa_component`
 
-*   **Description:** Queries the SOFA framework's component registry for details about a specific component.
+*   **Description:** Queries the SOFA framework's component registry for details about a specific component. **Now with best-effort repair logic:** it automatically attempts to load missing plugins and satisfy context requirements (like a MechanicalObject) to allow metadata inspection.
 *   **Parameters:**
     *   `component_name` (string, required): The class name of the SOFA component to query.
+*   **Returns (shape):** Includes `data_fields`, `links` (dependency info), and `hints` if instantiation was difficult.
 *   **Usage:**
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
@@ -148,11 +155,11 @@ When the user says “I want a scene that …”, follow this loop:
     ```
 
 ### 10. `summarize_scene`
-*   **Description:** Builds the scene graph (without running a simulation step) and returns a structured summary of nodes/objects plus basic verification checks.
+*   **Description:** Builds the scene graph (without running a simulation step) and returns a structured summary of nodes/objects plus **health checks** (hierarchy validation, missing solvers, broken links).
 *   **Parameters:**
     *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `add_scene_content(parent_node)`.
 *   **Returns (shape):**
-    *   On success: `{ "success": true, "node_count": number, "object_count": number, "class_counts": object, "checks": array, "nodes": array, ... }`
+    *   On success: `{ "success": true, "node_count": number, "object_count": number, "health_warnings": string[], "nodes": array, ... }`
     *   On failure: `{ "success": false, "message": string, "error": string }`
 *   **Usage:**
     ```bash
