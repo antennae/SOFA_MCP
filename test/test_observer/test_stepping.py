@@ -50,14 +50,21 @@ def test_run_and_extract_success(scene_path):
     result = stepping.run_and_extract(scene_path, steps, dt, node_path, field)
 
     assert result["success"]
-    assert "data" in result
-    assert len(result["data"]) == steps
+    assert "output_file" in result
+    assert "sample_data" in result
+    assert result["steps"] == steps
+    
+    # Verify file content
+    import json
+    with open(result["output_file"], "r") as f:
+        data = json.load(f)
+        assert len(data["data"]) == steps
+        assert data["metadata"]["field"] == field
 
     # Check that the position has changed from the initial position for each step.
-    initial_pos = [[0.0, 0.0, 0.0]]
-    for pos in result["data"]:
-        assert pos != initial_pos
-        assert len(pos[0]) == 3
+    # The sample_data is the last step.
+    assert result["sample_data"] != [[0.0, 0.0, 0.0]]
+    assert len(result["sample_data"][0]) == 3
 
 def test_run_and_extract_invalid_node(scene_path):
     steps = 1

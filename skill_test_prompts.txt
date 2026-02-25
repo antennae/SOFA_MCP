@@ -104,3 +104,26 @@ If the displacement is greater than 10mm, use update_data_field to incresase the
 If it is less than 10mm, decrease the youngModulus.
 Update youngModulus so that the displacement is close to 10mm (with tolerance of 0.1mm)
 Run the extraction one more time after the update to confirm the new displacement.
+
+
+7. Tests file storage & vertex selection
+- "I want to test the simulation data workflow. Use the cantilever_beam.py scene. Run it for 200 steps with dt=0.01. Extract the position
+  from the MechanicalObject in the scene. Once done, use process_simulation_data to give me the final position of only the vertex at index 0 and
+  index 89."
+
+
+8. Tests metrics & dimension handling
+- "Run the cantilever_beam.py simulation for 1000 steps. Use process_simulation_data with calculate_metrics=True to analyze the results. Tell me:
+  1. Did the beam reach a stable state (is it converged)?
+  2. What was the maximum displacement magnitude observed for the whole beam?
+  3. What is the net displacement vector for the first vertex in the mesh?"
+
+
+8. Tests non-vector data handling
+- "If the cantilever_beam.py has a mass component, extract the totalMass field for 10 steps. Then use process_simulation_data to check the
+  peak_magnitude. This will verify that the tool handles scalar data correctly without crashing on vector-specific math."
+
+
+9. Tests step slicing
+- "Run a simulation of cantilever_beam.py for 50 steps. I only care about the transient behavior at the very beginning. Use
+  process_simulation_data to extract only the first 5 steps of the position field."

@@ -23,8 +23,21 @@ def update_data_field(scene_path: str, object_name: str, field_name: str, new_va
 
 @mcp.tool()
 def run_and_extract(scene_path: str, steps: int, dt: float, node_path: str, field: str) -> dict:
-    """Runs a SOFA simulation and extracts data from a specified field at each step."""
+    """Runs a SOFA simulation and extracts data from a specified field at each step. Results are saved to a file."""
     return stepping.run_and_extract(scene_path, steps, dt, node_path, field)
+
+
+@mcp.tool()
+def process_simulation_data(
+    file_path: str, 
+    start_step: int = 0, 
+    end_step: int = -1, 
+    indices: list[int] = None, 
+    calculate_metrics: bool = False,
+    include_data: bool = False
+) -> dict:
+    """Processes a simulation data file to extract a subset of results or calculate metrics (displacement, stability)."""
+    return stepping.process_simulation_data(file_path, start_step, end_step, indices, calculate_metrics, include_data)
 
 
 
