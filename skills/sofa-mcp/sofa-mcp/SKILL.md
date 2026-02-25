@@ -27,6 +27,7 @@ When the user says “I want a scene that …”, follow this loop:
 4. **Generate `script_content` (Safety for LLM):**
     - **Avoid multi-line JSON escaping issues:** When calling tools with `script_content`, use simple Python strings. If using a model like 2.5 Flash, keep the script concise.
     - Always define `add_scene_content(parent_node)`.
+    - The createScene wrapper will handle the base scene structure, include animation loop, constraint solver, linear solve and constraint correction, so you can focus on just adding nodes and components relevant to the user’s request.
     - Group your `RequiredPlugin` calls at the top of `add_scene_content`.
 5. **Summarize & Reason:**
     - Call `summarize_scene(script_content)` to retrieve the structured scene graph.
