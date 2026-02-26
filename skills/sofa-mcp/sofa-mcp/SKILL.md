@@ -1,11 +1,11 @@
 ---
 name: sofa-mcp
-description: Integrates the SOFA Sim2Real MCP server tools for mesh inspection, math script execution, SOFA component querying, and scene generation/validation. Use this skill when turning a natural-language scene request into a runnable SOFA scene, or when analyzing SOFA simulation elements, performing calculations, or inspecting mesh properties.
+description: Integrates the SOFA MCP server tools for mesh inspection, math script execution, SOFA component querying, and scene generation/validation. Use this skill when turning a natural-language scene request into a runnable SOFA scene, or when analyzing SOFA simulation elements, performing calculations, or inspecting mesh properties.
 ---
 
-# SOFA Sim2Real MCP Server Skill
+# SOFA MCP Server Skill
 
-This skill starts and interacts with the SOFA Sim2Real MCP server.
+This skill starts and interacts with the SOFA MCP server.
 
 **IMPORTANT:** You must start the server using `start_sofa_mcp_server` before using any other tools.
 
@@ -54,7 +54,7 @@ When you receive the JSON from `summarize_scene`, you MUST verify the following:
 *   **Description:** Starts the SOFA MCP server in the background. This must be run once per session before using other tools.
 *   **Usage:**
     ```bash
-    ~/venv/bin/python -c "from sofa_mcp.server import mcp; mcp.run(transport='streamable-http', host='127.0.0.1', port=8000, path='/mcp', stateless_http=True, json_response=True)"
+    ~/venv/bin/python sofa_mcp/server.py &
     ```
 
 ### 2. `get_mesh_bounding_box`

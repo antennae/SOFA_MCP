@@ -1,4 +1,4 @@
-# SOFA Sim2Real MCP Server
+# SOFA MCP Server
 
 A Model Context Protocol (MCP) server for the **SOFA (Simulation Open Framework Architecture)** environment. This server enables LLMs and other AI agents to interact directly with SOFA simulations, facilitating autonomous scene generation and mesh analysis.
 

@@ -14,7 +14,7 @@ import sofa_mcp.observer.stepping as stepping
 import sofa_mcp.optimizer.patcher as patcher
 
 # Create the MCP server instance
-mcp = FastMCP("SOFA Sim2Real MCP")
+mcp = FastMCP("SOFA MCP")
 
 @mcp.tool()
 def update_data_field(scene_path: str, object_name: str, field_name: str, new_value) -> dict:
@@ -145,11 +145,7 @@ def get_plugins_for_components(component_names: list[str], context_components: l
 
 if __name__ == "__main__":
     from sofa_mcp.architect.plugin_cache import generate_and_save_plugin_map
-    print("Pre-generating SOFA component plugin cache...")
     generate_and_save_plugin_map()
-    print("...cache generation complete.")
-
-    print("Starting SOFA Sim2Real MCP server...")
     mcp.run(
         transport="streamable-http",
         host="127.0.0.1",
