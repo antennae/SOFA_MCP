@@ -107,16 +107,38 @@ def generate_and_save_plugin_map() -> Dict[str, str]:
                     plugin_libs.append(plugin_name)
 
     factory = factory_utils.get_object_factory_instance()
-    
-    for plugin_name in sorted(list(set(plugin_libs)), key=len, reverse=True):
+
+    unique_plugins = list(set(plugin_libs))
+
+    sofa_plugins = [p for p in unique_plugins if p.startswith("Sofa")]
+    softrobot_plugins = [p for p in unique_plugins if p.startswith("SoftRobot")]
+    other_plugins = [
+        p
+        for p in unique_plugins
+        if not p.startswith("Sofa") and not p.startswith("SoftRobot")
+    ]
+    # Sort SoftRobot plugins ascending by length to handle dependencies (e.g., SoftRobots before SoftRobots.Inverse)
+    sorted_softrobot = sorted(softrobot_plugins, key=len, reverse=False)
+    # Sort Sofa plugins descending by length to prioritize specific plugins
+    sorted_sofa = sorted(sofa_plugins, key=len, reverse=True)
+    # Sort other plugins descending by length (keeping original logic)
+    sorted_others = sorted(other_plugins, key=len, reverse=True)
+    # Combine them. Load SoftRobots first, then the more specific Sofa plugins, then others.
+    ordered_plugin_libs = sorted_softrobot + sorted_sofa + sorted_others
+
+    for plugin_name in ordered_plugin_libs:
         try:
             # Get components before loading
-            before_components = set(factory_utils.collect_component_names_from_factory(factory))
+            before_components = set(
+                factory_utils.collect_component_names_from_factory(factory)
+            )
             # Load the plugin
             with suppress_stdout_stderr():
                 SofaRuntime.importPlugin(plugin_name)
             # Get components after loading
-            after_components = set(factory_utils.collect_component_names_from_factory(factory))
+            after_components = set(
+                factory_utils.collect_component_names_from_factory(factory)
+            )
             # The difference is the set of components from this plugin
             new_components = after_components - before_components
             for component in new_components:
