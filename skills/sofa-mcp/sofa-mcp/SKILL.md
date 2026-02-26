@@ -55,6 +55,9 @@ When you receive the JSON from `summarize_scene`, you MUST verify the following:
 *   **Usage:**
     ```bash
     ~/venv/bin/python sofa_mcp/server.py &
+    # Note: The server may take a few moments to start (to build the plugin cache).
+    # For automated scripts, it's wise to add a short delay to avoid race conditions:
+    # ~/venv/bin/python sofa_mcp/server.py & sleep 3
     ```
 
 ### 2. `get_mesh_bounding_box`
@@ -137,11 +140,13 @@ When you receive the JSON from `summarize_scene`, you MUST verify the following:
     # Simple query
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
       -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"query_sofa_component","arguments":{"component_name":"EulerImplicitSolver"}}}'
     
     # Advanced query for a component requiring a specific context
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
       -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"query_sofa_component","arguments":{"component_name":"SomeComplexComponent","template":"Rigid3d","context_components":[{"type":"MyCustomTopology","name":"topo"}]}}}'
     ```
 
@@ -174,11 +179,13 @@ When you receive the JSON from `summarize_scene`, you MUST verify the following:
     # Simple batch query
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
       -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"get_plugins_for_components","arguments":{"component_names":["EulerImplicitSolver","CGLinearSolver"]}}}'
 
     # Advanced query with context
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
+      -H "Accept: application/json, text/event-stream" \
       -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"get_plugins_for_components","arguments":{"component_names":["AnisotropicForceField"],"context_components":[{"type":"MechanicalObject","template":"Vec2d"}]}}}'
     ```
 
