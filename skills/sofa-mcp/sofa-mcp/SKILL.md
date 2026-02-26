@@ -15,7 +15,7 @@ When the user says “I want a scene that …”, follow this loop:
 
 1. **Start server (once):** call `start_sofa_mcp_server` if not already running.
 2. **Clarify only what’s necessary:** if the request is underspecified, ask for the minimum missing details.
-3. **Component Research & Dependencies (New Workflow):**
+3. **Component Research & Dependencies:**
     - **Step 1: Discover Plugins (Batch Operation):**
         - First, collect all the component class names you plan to use in the scene.
         - Call `get_plugins_for_components` with the list of names. This is the most efficient way to identify all required plugins at once.
@@ -25,7 +25,6 @@ When the user says “I want a scene that …”, follow this loop:
         - When inspecting a component with `query_sofa_component`, check the returned `links` and `hints`. If it says it requires an `mstate`, ensure you add a `MechanicalObject` in the same node or a parent.
 
 4. **Generate `script_content` (Safety for LLM):**
-    - **Avoid multi-line JSON escaping issues:** When calling tools with `script_content`, use simple Python strings. If using a model like 2.5 Flash, keep the script concise.
     - Always define `add_scene_content(parent_node)`.
     - The createScene wrapper will handle the base scene structure, include animation loop, constraint solver, linear solve and constraint correction, so you can focus on just adding nodes and components relevant to the user’s request.
     - Group your `RequiredPlugin` calls at the top of `add_scene_content`.
@@ -43,7 +42,7 @@ When the user says “I want a scene that …”, follow this loop:
 When you receive the JSON from `summarize_scene`, you MUST verify the following:
 
 1.  **Solver Ancestry:** Every `MechanicalObject` must have a Time Integration Solver (e.g., `EulerImplicitSolver`, `RungeKutta4Solver`) in its ancestry (either in the same node or a parent node).
-2.  **ForceField Context:** Every `ForceField` component (like `TetrahedronFEMForceField`) must have a `MechanicalObject` in its ancestry to act upon.
+2.  **ForceField Context:** Every `ForceField` component (like `TetrahedronFEMForceField`) must have a `MechanicalObject` in the same node to act upon.
 3.  **Topology Mapping:** If a `ForceField` is volumetric (like `TetrahedronFEMForceField`), ensure a compatible Topology Container (e.g., `TetrahedronSetTopologyContainer`) exists in the context.
 4.  **Visual Feedback:** Ensure at least one `VisualModel` or `OglModel` exists if the user requested visual output.
 5.  **Baseline components:** Verify `has_animation_loop`, `has_constraint_solver`, and `has_solver_node` are all `true` in the `checks` list.
