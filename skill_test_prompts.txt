@@ -84,9 +84,9 @@ End-to-end (agentic workflows)
 - "I want a SOFA scene with a cantilever beam, fixed at one end, with gravity added. generate the scene, validate it, summarize and write it to cantilever_beam.py"
 
 3) Natural language -> preflight mesh -> validated scene (stub)
-- "I want a SOFA scene that will use meshes/prostate.vtk. First preflight the mesh (resolve path + stats). "
+- "Preflight the mesh (resolve path + stats) meshes/prostate.vtk, meshes/inner_*.stl. "
 - "Add volumetric mesh as Tetrahedron element, fix at the bottom, validate, summarize and write to prostate.py"
-- "based on prostate.py, add the internal chamber using inner_*.stl, internal chamber can be pressurized, validate, summarize, write it to prostate_chamber.py if successful"
+- "based on prostate.py, add the independent internal chambers using meshes/inner_*.stl, internal chamber can be pressurized. then validate, summarize, write it to prostate_chamber.py if successful"
 
 4) Natural language to edit a scene.
 - "based on cantilever_beam.py, add a force at the free end of the beam for support. validate, summarize, write it to beam_support.py if successful"
