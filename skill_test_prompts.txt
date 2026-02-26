@@ -85,7 +85,7 @@ End-to-end (agentic workflows)
 
 3) Natural language -> preflight mesh -> validated scene (stub)
 - "Preflight the mesh (resolve path + stats) meshes/prostate.vtk, meshes/inner_*.stl. "
-- "Add volumetric mesh as Tetrahedron element, fix at the bottom, validate, summarize and write to prostate.py"
+- "I want a SOFA scene with volumetric mesh as Tetrahedron element, fix at the bottom, validate, summarize and write to prostate.py"
 - "based on prostate.py, add the independent internal chambers using meshes/inner_*.stl, internal chamber can be pressurized. then validate, summarize, write it to prostate_chamber.py if successful"
 
 4) Natural language to edit a scene.
