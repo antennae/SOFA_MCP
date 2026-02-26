@@ -174,7 +174,7 @@ should return a tiny array even though the simulation is large."
 
 19. Simple Batch Plugin Discovery
 - "I'm creating a basic SOFA scene and I plan to use MechanicalObject, UniformMass, and EulerImplicitSolver. What plugins do I need to import?"
-- "I'm creating a basic SOFA scene and I plan to use SurfacePressureActuator. What plugins do I need to import?"
+- "I'm creating a basic SOFA scene and I plan to use SurfacePressureConstraint, SurfacePressureActuator. What plugins do I need to import?"
 - Find the required plugins for `EulerImplicitSolver` and `AnisotropicForceField`. For this check, assume a context where a MechanicalObject
      templated on `Vec2d` is present.
 - Get the required plugins for the following list of SOFA components: EulerImplicitSolver, CGLinearSolver, MechanicalObject, and
