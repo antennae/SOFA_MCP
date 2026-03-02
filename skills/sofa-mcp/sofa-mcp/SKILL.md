@@ -41,6 +41,9 @@ When the user says “I want a scene that …”, follow this loop:
 
 When you receive the JSON from `summarize_scene`, you MUST verify the following:
 
+1.  **Root Necessity:** In root node, Each scene must include a animation loop (e.g. `FreeMotionAnimationLoop`), and Constraint Solver (e.g. `NNCGConstraintSolver` or `QPInverseProblemSolver` if `SoftRobots.Inverse` is in use)
+2.  **Display Flag:** Ensure the root node has a `VisualStyle` with appropriate `displayFlags` (e.g., `showBehavior showBehaviorModels`).
+2.  **Solver Node:** Create a solver node that contains a time integration solver (e.g. `EulerImplicitSolver`), a linear solver (e.g. `SparseLDLSolver`), and a Constraint Correction (e.g. `GenericConstraintCorrection`).
 1.  **Solver Ancestry:** Every `MechanicalObject` must have a Time Integration Solver (e.g., `EulerImplicitSolver`, `RungeKutta4Solver`) in its ancestry (either in the same node or a parent node).
 2.  **ForceField Context:** Every `ForceField` component (like `TetrahedronFEMForceField`) must have a `MechanicalObject` in the same node to act upon.
 3.  **Topology Mapping:** If a `ForceField` is volumetric (like `TetrahedronFEMForceField`), ensure a compatible Topology Container (e.g., `TetrahedronSetTopologyContainer`) exists in the context.
