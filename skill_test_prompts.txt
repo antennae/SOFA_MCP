@@ -189,4 +189,6 @@ should return a tiny array even though the simulation is large."
 - Query the `BeamFEMForceField` component. Use `Rigid3d` as the template and ensure the context includes a `MechanicalObject` named `mstate`
      with the `Rigid3d` template, and a `BeamAdapter` named `beam_adapter`.
 
-22. Required plugin discovery
+22. 
+- @skills/sofa-mcp/sofa-mcp/SKILL.md as skill list, SOFA_MCP server is up and running
+- I want a SOFA scene that have 3 beams (as legs). fixed at one end, then each leg has 1 cable pulling so that it is actuated. Please help me impelement the scene validate and output.
