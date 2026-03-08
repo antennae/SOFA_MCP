@@ -84,6 +84,7 @@ End-to-end (agentic workflows)
 - "I want a SOFA scene with a cantilever beam, fixed at one end, with gravity added. generate the scene, validate it, summarize and write it to cantilever_beam.py"
 
 3) Natural language -> preflight mesh -> validated scene (stub)
+- I'm working on MCP, with @skills/sofa-mcp/sofa-mcp/SKILL.md as skill list, start mcp server,
 - "Preflight the mesh (resolve path + stats) meshes/prostate.vtk, meshes/inner_*.stl. "
 - "I want a SOFA scene with volumetric mesh as Tetrahedron element, fix at the bottom, validate, summarize and write to prostate.py"
 - "based on prostate.py, add the independent internal chambers using meshes/inner_*.stl, internal chamber can be pressurized. then validate, summarize, write it to prostate_chamber.py if successful"
@@ -191,4 +192,5 @@ should return a tiny array even though the simulation is large."
 
 22. 
 - @skills/sofa-mcp/sofa-mcp/SKILL.md as skill list, SOFA_MCP server is up and running
-- I want a SOFA scene that have 3 beams (as legs). fixed at one end, then each leg has 1 cable pulling so that it is actuated. Please help me impelement the scene validate and output.
+- I want a SOFA scene that have 3 beams (as legs). fixed at one end, then each leg has 1 cable pulling so that it is actuated. 
+- 3 Cables have one common start point and end point at the end of the leg. Please help me impelement the scene validate and output.
