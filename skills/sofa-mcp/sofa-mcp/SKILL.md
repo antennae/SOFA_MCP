@@ -9,46 +9,57 @@ This skill starts and interacts with the SOFA MCP server.
 
 **IMPORTANT:** You must start the server using `start_sofa_mcp_server` before using any other tools.
 
-## Recommended Agent Workflow (Natural language → validated scene)
+## Recommanded Agent Workflow (Natural language → validated scene)
 
-When the user says “I want a scene that …”, follow this loop:
+When the user says “I want a SOFA scene that …”, you should follow this loop:
 
 1. **Start server (once):** call `start_sofa_mcp_server` if not already running.
 2. **Clarify only what’s necessary:** if the request is underspecified, ask for the minimum missing details.
 3. **Component Research & Dependencies:**
     - **Step 1: Discover Plugins (Batch Operation):**
-        - First, collect all the component class names you plan to use in the scene.
-        - Call `get_plugins_for_components` with the list of names. This is the most efficient way to identify all required plugins at once.
+        - First, you MUST collect all the component class names you plan to use in the scene.
+        - You MUST call `get_plugins_for_components` with the list of names to find the required plugins.
+        - You MUST NOT guess or assume any plugin names. For every component you add to the scene, you MUST have first found its plugin using `get_plugins_for_components`.
     - **Step 2: Inspect Component Details (As Needed):**
         - If you need to know the specific `data_fields`, `links`, or default values for a single component, use `query_sofa_component`.
     - **Step 3: Check Dependencies:**
         - When inspecting a component with `query_sofa_component`, check the returned `links` and `hints`. If it says it requires an `mstate`, ensure you add a `MechanicalObject` in the same node or a parent.
 
-4. **Generate `script_content` (Safety for LLM):**
-    - Always define `add_scene_content(parent_node)`.
-    - The createScene wrapper will handle the base scene structure, include animation loop, constraint solver, linear solve and constraint correction, so you can focus on just adding nodes and components relevant to the user’s request.
-    - Group your `RequiredPlugin` calls at the top of `add_scene_content`.
+4. **Generate `script_content` (Architectural Design):**
+    - You MUST define the full `createScene(root_node)` function.
+    - You are responsible for adding all necessary components: plugins, solvers, animation loops, and the actual simulation objects.
+    - Group your `RequiredPlugin` calls at the top of `createScene` or at the global level.
+    - Ensure your scene follows the **Scene Health Rules** below for physical and visual correctness.
+
 5. **Summarize & Reason:**
     - Call `summarize_scene(script_content)` to retrieve the structured scene graph.
-    - **Perform Agent-Side Validation:** Analyze the `nodes` and `objects` list against the **Scene Health Rules** below.
+    - **Perform Agent-Side Validation:** Analyze the `nodes`, `objects`, and the `checks` list in the summary.
+    - Check if essential classes (AnimationLoop, ODESolver, etc.) are present in the hierarchy.
+    - Check if the scene graph follows the **Scene Health Rules**, if not, identify what’s missing and fix it in your `script_content`.
+
 6. **Validate & Auto-repair:**
-    - Call `validate_scene(script_content)` for a full dry-run.
-    - If validation fails, use the error message AND your scene graph summary to identify and fix structural issues.
+    - Call `validate_scene(script_content)` for a full dry-run (this initializes the scene and steps it).
+    - If validation fails, use the traceback/error AND your scene graph summary to fix the script.
+
 7. **Write final file:** once validation succeeds, call `write_scene(script_content, output_filename)`.
-8. **Stop condition:** on success, report the returned output `path` and any warnings.
 
-## Scene Health Rules (Agent-Side Reasoning)
+## Scene Health Rules (The Architect's Checklist)
 
-When you receive the JSON from `summarize_scene`, you MUST verify the following:
+Every valid SOFA scene must satisfy these structural requirements:
 
-1.  **Root Necessity:** In root node, Each scene must include a animation loop (e.g. `FreeMotionAnimationLoop`), and Constraint Solver (e.g. `NNCGConstraintSolver` or `QPInverseProblemSolver` if `SoftRobots.Inverse` is in use)
-2.  **Display Flag:** Ensure the root node has a `VisualStyle` with appropriate `displayFlags` (e.g., `showBehavior showBehaviorModels`).
-2.  **Solver Node:** Create a solver node that contains a time integration solver (e.g. `EulerImplicitSolver`), a linear solver (e.g. `SparseLDLSolver`), and a Constraint Correction (e.g. `GenericConstraintCorrection`).
-1.  **Solver Ancestry:** Every `MechanicalObject` must have a Time Integration Solver (e.g., `EulerImplicitSolver`, `RungeKutta4Solver`) in its ancestry (either in the same node or a parent node).
-2.  **ForceField Context:** Every `ForceField` component (like `TetrahedronFEMForceField`) must have a `MechanicalObject` in the same node to act upon.
-3.  **Topology Mapping:** If a `ForceField` is volumetric (like `TetrahedronFEMForceField`), ensure a compatible Topology Container (e.g., `TetrahedronSetTopologyContainer`) exists in the context.
-4.  **Visual Feedback:** Ensure at least one `VisualModel` or `OglModel` exists if the user requested visual output.
-5.  **Baseline components:** Verify `has_animation_loop`, `has_constraint_solver`, and `has_solver_node` are all `true` in the `checks` list.
+1.  **Plugins:** Include all `RequiredPlugin` objects for the components used (e.g., `Sofa.Component.ODESolver.Backward` for `EulerImplicitSolver`).
+2.  **Animation Loop:** The root node (or an ancestor) must have an animation loop (e.g., `FreeMotionAnimationLoop` or `DefaultAnimationLoop`).
+3.  **Visual Style:** Include a `VisualStyle` object with `displayFlags="showBehavior showBehaviorModels"` to ensure the simulation is visible in a GUI.
+4.  **Integration Solver:** Every `MechanicalObject` must have a Time Integration Solver (e.g., `EulerImplicitSolver`) in its ancestry.
+5. **Linear Solver:** If using an implicit solver, you MUST include a linear solver. 
+   - **Recommended:** `SparseLDLSolver` (template="Mat33d" for FEM) for stability in soft-tissue simulation.
+   - Avoid `CGLinearSolver` unless dealing with extremely large meshes (>100k nodes).
+6. **Constraint Handling:** If using `FreeMotionAnimationLoop`, you MUST include:
+   - **ConstraintSolver:** `NNCGConstraintSolver` (or `QPInverseProblemSolver` if SoftRobots.Inverse is used).
+   - **Correction:** `GenericConstraintCorrection` on the mechanical nodes.
+7.  **ForceField Mapping:** Every `ForceField` (like `TetrahedronFEMForceField`) must be in a node that contains a `MechanicalObject`.
+8.  **Topology:** Volumetric force fields require a corresponding Topology Container (e.g., `TetrahedronSetTopologyContainer`).
+9.  **Visual Model:** For high-quality rendering, map the mechanical state to a visual state using a `VisualModel` or `OglModel` and a `Mapping`.
 
 ## Available Tools
 

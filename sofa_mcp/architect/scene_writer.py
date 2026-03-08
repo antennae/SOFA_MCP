@@ -6,89 +6,24 @@ from typing import Dict, Any
 
 
 def _build_scene_source(script_content: str) -> str:
-    utilities = """
-def add_header(root_node):
-    root_node.addObject("RequiredPlugin", pluginName="Sofa.Component.AnimationLoop")
-    root_node.addObject("RequiredPlugin", pluginName="Sofa.Component.Constraint.Lagrangian.Solver")
-    root_node.addObject("RequiredPlugin", pluginName="Sofa.Component.ODESolver.Backward")
-    root_node.addObject("RequiredPlugin", pluginName="Sofa.Component.LinearSolver.Direct")
-    root_node.addObject("RequiredPlugin", pluginName="Sofa.Component.Constraint.Lagrangian.Correction")
-    root_node.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
-    root_node.addObject("RequiredPlugin", pluginName="Sofa.Component.Visual")
-    root_node.addObject("VisualStyle", displayFlags="showBehavior showBehaviorModels")
-    root_node.addObject(
-        "FreeMotionAnimationLoop",
-        name="AnimationLoop",
-        parallelCollisionDetectionAndFreeMotion=False,
-        parallelODESolving=False,
-    )
-    # if not inverse:
-    root_node.addObject(
-        "NNCGConstraintSolver",
-        name="ConstraintSolver",
-    )
-    # else:
-    #     root_node.addObject(
-    #         "QPInverseProblemSolver",
-    #         name="ConstraintSolver",
-    #     )
-def add_solver(
-    root_node,
-):
-    solver_node = root_node.addChild("solver_node")
-
-    solver_node.addObject(
-        "EulerImplicitSolver",
-        firstOrder=False,
-        rayleighStiffness=0.1,
-        rayleighMass=0.1,
-        vdamping=0.1,
-    )
-    solver_node.addObject(
-        "SparseLDLSolver",
-        name="Solver",
-        template="CompressedRowSparseMatrixMat3x3d",
-        parallelInverseProduct=True,
-    )
-    solver_node.addObject(
-        "GenericConstraintCorrection",
-        name="ConstraintCorrection",
-    )
-    return solver_node
+    """The user-provided script is now expected to be the full content,
+    including the createScene(rootNode) function.
     """
-
-    create_scene_function = f"""
-{utilities}
-
-# The user-provided script is expected to define a function called 'add_scene_content'
-{script_content}
-
-def createScene(rootNode):
-    # 1. Call your utilities first
-    add_header(rootNode)
-    solver_node = add_solver(rootNode)
-
-    # 2. Call the user-defined function
-    if 'add_scene_content' in globals():
-        add_scene_content(solver_node)
-    else:
-        raise NameError("The provided script_content must define a function called 'add_scene_content(parent_node)'.")
-"""
-
-    return create_scene_function
+    return script_content
 
 
-def _build_wrapper_preamble(create_scene_function: str, *, extra_imports: str = "") -> str:
+def _build_wrapper_preamble(script_content: str, *, extra_imports: str = "") -> str:
     lines = [
         "import Sofa",
         "import Sofa.Core",
+        "import Sofa.Simulation",
         "import sys",
     ]
     if extra_imports.strip():
         lines.append(extra_imports.strip())
 
     lines.append("")
-    lines.append(create_scene_function)
+    lines.append(script_content)
     lines.append("")
     return "\n".join(lines)
 
@@ -116,47 +51,35 @@ def _tree_has_class(node, class_name: str) -> bool:
     return any(_node_has_class(n, class_name) for n in _iter_nodes(node))
 
 def _assert_required_components(root):
-    missing = []
-    # These are added by add_header/add_solver. If they are missing, the scene
-    # may "run" but behave incorrectly.
-    if root.getObject('AnimationLoop') is None:
-        missing.append("FreeMotionAnimationLoop (name='AnimationLoop')")
-    if root.getObject('ConstraintSolver') is None:
-        missing.append("NNCGConstraintSolver (name='ConstraintSolver')")
-
-    solver_node = root.getChild('solver_node')
-    if solver_node is None:
-        missing.append("Child node 'solver_node'")
-    else:
-        if not _node_has_class(solver_node, 'EulerImplicitSolver'):
-            missing.append("EulerImplicitSolver (in solver_node)")
-        if solver_node.getObject('Solver') is None:
-            missing.append("SparseLDLSolver (name='Solver')")
-        if solver_node.getObject('ConstraintCorrection') is None:
-            missing.append("GenericConstraintCorrection (name='ConstraintCorrection')")
-
+    # Flexible validation: we check if the scene tree contains the necessary physics building blocks.
+    checks = {
+        "AnimationLoop": _tree_has_class(root, "FreeMotionAnimationLoop") or _tree_has_class(root, "DefaultAnimationLoop"),
+        "ConstraintSolver": _tree_has_class(root, "NNCGConstraintSolver") or _tree_has_class(root, "QPInverseProblemSolver"),
+        "TimeIntegration": _tree_has_class(root, "EulerImplicitSolver") or _tree_has_class(root, "RungeKutta4Solver"),
+        "LinearSolver": _tree_has_class(root, "SparseLDLSolver") or _tree_has_class(root, "CGLinearSolver") or _tree_has_class(root, "SparseDirectSolver"),
+    }
+    
+    missing = [k for k, v in checks.items() if not v]
     if missing:
-        raise RuntimeError("Missing required baseline components: " + "; ".join(missing))
-
-    # Soft check: warn if scene has no DOFs.
-    if not _tree_has_class(root, 'MechanicalObject'):
-        print("WARNING: No MechanicalObject found in the scene graph.")
+        # We don't raise here yet to allow the agent to see the warnings first, 
+        # but the tool output will reflect this.
+        print(f"WARNING: Missing key components: {', '.join(missing)}")
 
 def validate():
     root = Sofa.Core.Node("root")
     try:
-        if 'createScene' not in globals():
+        if "createScene" not in globals():
             print("ERROR: createScene function missing", file=sys.stderr)
             sys.exit(1)
 
         createScene(root)
         _assert_required_components(root)
         Sofa.Simulation.init(root)
-        # Try one simulation step
         Sofa.Simulation.animate(root, 0.01)
         print("SUCCESS: Scene initialized and animated 1 step.")
     except Exception as e:
-        print("ERROR: " + str(e), file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":
@@ -225,16 +148,11 @@ def summarize():
         class_counts = {}
         object_count = 0
         mechanical_object_count = 0
-        solver_node_exists = False
-        user_object_count = 0
 
-        solver_node = root.getChild('solver_node')
-        if solver_node is not None:
-            solver_node_exists = True
-
-        # Baseline components added by add_header/add_solver
-        animation_loop_obj = root.getObject('AnimationLoop')
-        constraint_solver_obj = root.getObject('ConstraintSolver')
+        # These are classes that indicate the scene's health.
+        has_animation_loop = _tree_has_class(root, 'FreeMotionAnimationLoop') or _tree_has_class(root, 'DefaultAnimationLoop')
+        has_constraint_solver = _tree_has_class(root, 'NNCGConstraintSolver') or _tree_has_class(root, 'QPInverseProblemSolver')
+        has_time_integration = _tree_has_class(root, 'EulerImplicitSolver') or _tree_has_class(root, 'RungeKutta4Solver')
 
         for node, path in _iter_nodes(root, "/root"):
             try:
@@ -254,16 +172,12 @@ def summarize():
                 if class_name == 'MechanicalObject':
                     mechanical_object_count += 1
 
-                # Count user objects under solver_node excluding baseline solver objects.
-                if solver_node_exists and node is solver_node and class_name not in SOLVER_BASELINE_CLASSES:
-                    user_object_count += 1
-
             nodes.append({"path": path, "name": node_name, "objectCount": len(objects), "objects": objects})
 
         checks = []
-        checks.append({"name": "has_animation_loop", "passed": animation_loop_obj is not None})
-        checks.append({"name": "has_constraint_solver", "passed": constraint_solver_obj is not None})
-        checks.append({"name": "has_solver_node", "passed": solver_node_exists})
+        checks.append({"name": "has_animation_loop", "passed": has_animation_loop})
+        checks.append({"name": "has_constraint_solver", "passed": has_constraint_solver})
+        checks.append({"name": "has_time_integration", "passed": has_time_integration})
 
         summary = {
             "success": True,
@@ -271,8 +185,6 @@ def summarize():
             "object_count": object_count,
             "class_counts": class_counts,
             "mechanical_object_count": mechanical_object_count,
-            "solver_node_exists": solver_node_exists,
-            "user_object_count": user_object_count,
             "checks": checks,
             "nodes": nodes,
         }
@@ -280,7 +192,8 @@ def summarize():
         # Prefix to allow robust parsing even if user code prints.
         print("SCENE_SUMMARY_JSON:" + json.dumps(summary, separators=(",", ":")))
     except Exception as e:
-        print("ERROR: " + str(e), file=sys.stderr)
+        import traceback
+        traceback.print_exc()
         sys.exit(1)
 
 if __name__ == "__main__":
