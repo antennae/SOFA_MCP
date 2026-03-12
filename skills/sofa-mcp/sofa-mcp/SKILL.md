@@ -49,7 +49,7 @@ Every valid SOFA scene must satisfy these structural requirements:
 
 1.  **Plugins:** Include all `RequiredPlugin` objects for the components used (e.g., `Sofa.Component.ODESolver.Backward` for `EulerImplicitSolver`).
 2.  **Animation Loop:** The root node (or an ancestor) must have an animation loop (e.g., `FreeMotionAnimationLoop` or `DefaultAnimationLoop`).
-3.  **Visual Style:** Include a `VisualStyle` object with `displayFlags="showBehavior showBehaviorModels"` to ensure the simulation is visible in a GUI.
+3.  **Visual Style:** Include a `VisualStyle` object with `displayFlags="showBehavior"` to ensure the simulation is visible in a GUI.
 4.  **Integration Solver:** Every `MechanicalObject` must have a Time Integration Solver (e.g., `EulerImplicitSolver`) in its ancestry.
 5. **Linear Solver:** If using an implicit solver, you MUST include a linear solver. 
    - **Recommended:** `SparseLDLSolver` (template="Mat33d" for FEM) for stability in soft-tissue simulation.
@@ -63,16 +63,17 @@ Every valid SOFA scene must satisfy these structural requirements:
 
 ## Available Tools
 
-### 1. `start_sofa_mcp_server`
+### 1. `start_sofa_mcp_server` (Self-Instruction)
 
-*   **Description:** Starts the SOFA MCP server in the background. This must be run once per session before using other tools.
+*   **Description:** Starts the SOFA MCP server in the background. 
+    **CRITICAL:** This must be run once per session using `run_shell_command` with `is_background: true`.
+                  It must be waiting for the server to be fully ready before any other tools are called, otherwise you will get connection errors.
 *   **Usage:**
-    ```bash
-    ~/venv/bin/python sofa_mcp/server.py &
-    # Note: The server may take a few moments to start (to build the plugin cache).
-    # For automated scripts, it's wise to add a short delay to avoid race conditions:
-    # ~/venv/bin/python sofa_mcp/server.py & sleep 3
+    ```python
+    # Use run_shell_command with is_background=True
+    command = "~/venv/bin/python sofa_mcp/server.py"
     ```
+*   **Mandatory Header:** Every `curl` request to the server **MUST** include `-H "Accept: application/json"`. Failure to do so will result in a `406 Not Acceptable` error.
 
 ### 2. `get_mesh_bounding_box`
 
@@ -83,7 +84,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_mesh_bounding_box","arguments":{"mesh_path":"<mesh_path>"}}}'
     ```
 
@@ -96,7 +97,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"inspect_mesh_topology","arguments":{"mesh_path":"<mesh_path>"}}}'
     ```
 
@@ -110,7 +111,7 @@ Every valid SOFA scene must satisfy these structural requirements:
         ```bash
         curl -X POST http://127.0.0.1:8000/mcp \
             -H "Content-Type: application/json" \
-            -H "Accept: application/json, text/event-stream" \
+            -H "Accept: application/json" \
             -d '{"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"resolve_asset_path","arguments":{"path":"<path>"}}}'
         ```
 
@@ -124,7 +125,7 @@ Every valid SOFA scene must satisfy these structural requirements:
         ```bash
         curl -X POST http://127.0.0.1:8000/mcp \
             -H "Content-Type: application/json" \
-            -H "Accept: application/json, text/event-stream" \
+            -H "Accept: application/json" \
             -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"mesh_stats","arguments":{"mesh_path":"<mesh_path>"}}}'
         ```
 
@@ -137,7 +138,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
     -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"run_math_script","arguments":{"script":"<script>"}}}'
     ```
 
@@ -154,13 +155,13 @@ Every valid SOFA scene must satisfy these structural requirements:
     # Simple query
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":6,"method":"tools/call","params":{"name":"query_sofa_component","arguments":{"component_name":"EulerImplicitSolver"}}}'
     
     # Advanced query for a component requiring a specific context
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"query_sofa_component","arguments":{"component_name":"SomeComplexComponent","template":"Rigid3d","context_components":[{"type":"MyCustomTopology","name":"topo"}]}}}'
     ```
 
@@ -177,7 +178,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
     -d '{"jsonrpc":"2.0","id":7,"method":"tools/call","params":{"name":"search_sofa_components","arguments":{"query":"<query>","limit":50}}}'
     ```
 
@@ -193,13 +194,13 @@ Every valid SOFA scene must satisfy these structural requirements:
     # Simple batch query
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":8,"method":"tools/call","params":{"name":"get_plugins_for_components","arguments":{"component_names":["EulerImplicitSolver","CGLinearSolver"]}}}'
 
     # Advanced query with context
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":9,"method":"tools/call","params":{"name":"get_plugins_for_components","arguments":{"component_names":["AnisotropicForceField"],"context_components":[{"type":"MechanicalObject","template":"Vec2d"}]}}}'
     ```
 
@@ -214,7 +215,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
             -d '{"jsonrpc":"2.0","id":10,"method":"tools/call","params":{"name":"validate_scene","arguments":{"script_content":"<script_content>"}}}'
     ```
 
@@ -229,7 +230,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
             -d '{"jsonrpc":"2.0","id":11,"method":"tools/call","params":{"name":"summarize_scene","arguments":{"script_content":"<script_content>"}}}'
     ```
 
@@ -244,7 +245,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
             -d '{"jsonrpc":"2.0","id":12,"method":"tools/call","params":{"name":"write_scene","arguments":{"script_content":"<script_content>","output_filename":"<output_filename>"}}}'
     ```
 
@@ -260,7 +261,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
             -d '{"jsonrpc":"2.0","id":13,"method":"tools/call","params":{"name":"write_and_test_scene","arguments":{"script_content":"<script_content>","output_filename":"<output_filename>"}}}'
     ```
 
@@ -276,7 +277,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":14,"method":"tools/call","params":{"name":"load_scene","arguments":{"scene_path":"<scene_path>"}}}'
     ```
 
@@ -296,7 +297,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
             -d '{"jsonrpc":"2.0","id":15,"method":"tools/call","params":{"name":"patch_scene","arguments":{"scene_path":"<scene_path>","patch":{"op":"insert_after","anchor":"def createScene(rootNode):","text":"\n    # patched\n"}}}}'
           ```
       
@@ -316,7 +317,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
     -H "Content-Type: application/json" \
-    -H "Accept: application/json, text/event-stream" \
+    -H "Accept: application/json" \
     -d '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"run_and_extract","arguments":{"scene_path":"cantilever_beam.py","steps":5,"dt":0.01,"node_path":"/solver_node/mo","field":"position"}}}'
     ```
 
@@ -339,7 +340,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
     -H "Content-Type: application/json" \
-    -H "Accept: application/json, text/event-stream" \
+    -H "Accept: application/json" \
     -d '{"jsonrpc":"2.0","id":17,"method":"tools/call","params":{"name":"process_simulation_data","arguments":{"file_path":".sofa_mcp_results/sim_data_20260225_120000.json","indices":[0, 42],"calculate_metrics":true}}}'
     ```
 
@@ -358,7 +359,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":18,"method":"tools/call","params":{"name":"update_data_field","arguments":{"scene_path":"scene.py","object_name":"mo","field_name":"totalMass","new_value":5.0}}}'
     ```
 
@@ -377,6 +378,6 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```bash
     curl -X POST http://127.0.0.1:8000/mcp \
       -H "Content-Type: application/json" \
-      -H "Accept: application/json, text/event-stream" \
+      -H "Accept: application/json" \
       -d '{"jsonrpc":"2.0","id":19,"method":"tools/call","params":{"name":"find_indices_by_region","arguments":{"file_path":"prostate.stl","axis":"z","mode":"max"}}}'
     ```
