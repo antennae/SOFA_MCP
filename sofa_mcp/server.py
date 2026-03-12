@@ -17,6 +17,12 @@ import sofa_mcp.optimizer.patcher as patcher
 mcp = FastMCP("SOFA MCP")
 
 @mcp.tool()
+def health_check() -> dict:
+    """Returns the server status and initialization state."""
+    return {"status": "ready", "version": "1.0.0"}
+
+
+@mcp.tool()
 def update_data_field(scene_path: str, object_name: str, field_name: str, new_value) -> dict:
     """Updates a specific field of a SOFA object in a Python scene file."""
     return patcher.update_data_field(scene_path, object_name, field_name, new_value)
