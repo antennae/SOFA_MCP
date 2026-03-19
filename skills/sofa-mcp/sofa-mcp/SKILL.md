@@ -52,7 +52,7 @@ Every valid SOFA scene must satisfy these structural requirements:
 3.  **Visual Style:** Include a `VisualStyle` object with `displayFlags="showBehavior"` to ensure the simulation is visible in a GUI.
 4.  **Integration Solver:** Every `MechanicalObject` must have a Time Integration Solver (e.g., `EulerImplicitSolver`) in its ancestry.
 5. **Linear Solver:** If using an implicit solver, you MUST include a linear solver. 
-   - **Recommended:** `SparseLDLSolver` (template="Mat33d" for FEM) for stability in soft-tissue simulation.
+   - **Recommended:** `SparseLDLSolver` (template="CompressedRowSparseMatrixMat3x3d" for FEM) for stability in soft-tissue simulation.
    - Avoid `CGLinearSolver` unless dealing with extremely large meshes (>100k nodes).
 6. **Constraint Handling:** If using `FreeMotionAnimationLoop`, you MUST include:
    - **ConstraintSolver:** `NNCGConstraintSolver` (or `QPInverseProblemSolver` if SoftRobots.Inverse is used).
@@ -207,7 +207,7 @@ Every valid SOFA scene must satisfy these structural requirements:
 ### 10. `validate_scene`
 *   **Description:** Validates a proposed SOFA scene snippet by embedding it into a baseline scene wrapper, initializing the scene, and animating one simulation step (`dt=0.01`).
 *   **Parameters:**
-    *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `add_scene_content(parent_node)`.
+    *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `createScene(rootNode)`.
 *   **Returns (shape):**
     *   On success: `{ "success": true, "message": string, "stdout": string }`
     *   On failure: `{ "success": false, "message": string, "error": string, "stdout": string }` (or timeout with `error: "Timeout"`)
@@ -222,7 +222,7 @@ Every valid SOFA scene must satisfy these structural requirements:
 ### 11. `summarize_scene`
 *   **Description:** Builds the scene graph (without running a simulation step) and returns a structured JSON summary of nodes and objects. **Use this for agent-side structural reasoning.**
 *   **Parameters:**
-    *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `add_scene_content(parent_node)`.
+    *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `createScene(rootNode)`.
 *   **Returns (shape):**
     *   On success: `{ "success": true, "node_count": number, "object_count": number, "class_counts": object, "checks": array, "nodes": array }`
     *   On failure: `{ "success": false, "message": string, "error": string }`
@@ -237,7 +237,7 @@ Every valid SOFA scene must satisfy these structural requirements:
 ### 12. `write_scene`
 *   **Description:** Writes the generated SOFA scene file to disk **without** running validation. Prefer calling `validate_scene` first.
 *   **Parameters:**
-    *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `add_scene_content(parent_node)`.
+    *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `createScene(rootNode)`.
     *   `output_filename` (string, required): Filesystem path (relative or absolute) to write the SOFA scene Python file to (typically ends with `.py`). The parent directory will be created if needed, and the file is overwritten if it already exists.
 *   **Returns (shape):**
     *   On success: `{ "success": true, "message": string, "path": string }`
@@ -252,7 +252,7 @@ Every valid SOFA scene must satisfy these structural requirements:
 ### 13. `write_and_test_scene`
 *   **Description:** Drafts a SOFA scene from a provided Python script, dry-runs it, and reports any errors or issues found during the process.
 *   **Parameters:**
-    *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `add_scene_content(parent_node)` which adds objects/nodes under the provided SOFA node. This content is embedded into a generated scene wrapper that provides `createScene(rootNode)` and baseline solver/animation-loop utilities; validation attempts to initialize the scene and animate one simulation step (`dt=0.01`).
+    *   `script_content` (string, required): Python source code (as a plain string) that **must** define a function `createScene(rootNode)`. Validation attempts to initialize the scene and animate one simulation step (`dt=0.01`).
     *   `output_filename` (string, required): Filesystem path (relative or absolute) to write the validated SOFA scene Python file to (typically ends with `.py`). The parent directory will be created if needed, and the file is overwritten if it already exists. The file is only written when validation succeeds.
 *   **Returns (shape):**
     *   On success: `{ "success": true, "message": string, "path": string, "stdout": string }`
@@ -319,6 +319,38 @@ Every valid SOFA scene must satisfy these structural requirements:
     -H "Content-Type: application/json" \
     -H "Accept: application/json" \
     -d '{"jsonrpc":"2.0","id":16,"method":"tools/call","params":{"name":"run_and_extract","arguments":{"scene_path":"cantilever_beam.py","steps":5,"dt":0.01,"node_path":"/solver_node/mo","field":"position"}}}'
+    ```
+
+### 20. `run_and_extract_multi`
+
+*   **Description:** Runs a SOFA simulation and extracts data from **multiple fields/nodes in a single run**. Use this instead of calling `run_and_extract` repeatedly when you need several fields (e.g., position + velocity, or data from multiple nodes). All fields are resolved before the simulation starts — if any path is wrong, the tool fails immediately before wasting simulation time.
+*   **Parameters:**
+    *   `scene_path` (string, required): Path to the SOFA scene Python file.
+    *   `steps` (integer, required): Number of simulation steps to run.
+    *   `dt` (number, required): Time step for the simulation.
+    *   `fields` (array of objects, required): List of field descriptors. Each object must have:
+        *   `node_path` (string): Path to the node/object in the scene graph (e.g., `mechanics/mo`).
+        *   `field` (string): Data field name to extract (e.g., `position`).
+        *   `key` (string, optional): Alias for this field in the output. Defaults to `<node_path>/<field>`.
+*   **Returns (shape):**
+    *   On success: `{ "success": true, "output_file": string, "steps": number, "fields": { "<key>": { "data_shape": number[], "data_preview": array } }, "message": string }`
+    *   On failure: `{ "success": false, "error": string }`
+*   **Output JSON format** (saved to `.sofa_mcp_results/sim_data_multi_<timestamp>.json`):
+    ```json
+    {
+      "metadata": { "scene_path": "...", "steps": 50, "dt": 0.01, "fields": [...] },
+      "fields": {
+        "pos":  [[step_0_data], [step_1_data], ...],
+        "vel":  [[step_0_data], [step_1_data], ...]
+      }
+    }
+    ```
+*   **Usage:**
+    ```bash
+    curl -X POST http://127.0.0.1:8000/mcp \
+    -H "Content-Type: application/json" \
+    -H "Accept: application/json" \
+    -d '{"jsonrpc":"2.0","id":20,"method":"tools/call","params":{"name":"run_and_extract_multi","arguments":{"scene_path":"cantilever_beam.py","steps":10,"dt":0.01,"fields":[{"node_path":"solver_node/mo","field":"position","key":"pos"},{"node_path":"solver_node/mo","field":"velocity","key":"vel"}]}}}'
     ```
 
 ### 17. `process_simulation_data`
