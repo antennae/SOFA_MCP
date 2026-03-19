@@ -52,7 +52,7 @@ The SOFA MCP bridges the gap between natural language requests and runnable, val
 ### Prerequisites
 
 - Python 3.10+
-- SOFA Framework with `SofaPython3` plugin installed and in your `PYTHONPATH`.
+- SOFA Framework with `SofaPython3` plugin installed and in your `PYTHONPATH` and `SOFA_ROOT` defined to the build or install directory of SOFA.
 
 ### Installation
 
