@@ -75,12 +75,6 @@ cd SOFA_MCP
 python sofa_mcp/server.py
 ```
 
-or
-
-```bash
-python -c "from sofa_mcp.server import mcp; mcp.run(transport='streamable-http', host='127.0.0.1', port=8000, path='/mcp', stateless_http=True, json_response=True)"
-```
-
 The server defaults to `http://127.0.0.1:8000/mcp`.
 
 For gemini CLI, follow the [Skill Management Guide](./skill_management.md) to package and install the `sofa-mcp` skill.
