@@ -42,7 +42,7 @@ The SOFA MCP bridges the gap between natural language requests and runnable, val
 
 1. **Start Server:** Launch the MCP server.
 2. **Mesh Preflight:** If a mesh is involved, use `mesh_stats` to determine scaling and topology.
-3. **Draft Scene:** Generate Python code defining `add_scene_content(parent_node)`.
+3. **Draft Scene:** Generate Python code defining `createScene(root_node)`.
 4. **Validate:** Use `validate_scene` to ensure the script is runnable.
 5. **Iterate:** Auto-repair the script based on validation errors.
 6. **Finalize:** Write the validated file using `write_scene`.
@@ -88,7 +88,7 @@ For gemini CLI, follow the [Skill Management Guide](./skill_management.md) to pa
 ## 📜 Framework Guidelines
 
 - **Units:** Standardize on `[mm, g, s]` for consistency.
-- **Template:** Used a templated SOFA scene with `FreeMotionAnimationLoop`, `NNCGConstraintSolver`, `EulerImplicitSolver`, `SparseLDLSolver`, and `GenericConstraintCorrection`.
+
 
 ## 📝 Examples
 
