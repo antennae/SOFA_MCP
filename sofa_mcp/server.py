@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from typing import Any
 from fastmcp import FastMCP
 import sofa_mcp.architect.mesh_inspector as mesh_inspector
+import sofa_mcp.architect.mesh_generator as mesh_generator
 import sofa_mcp.architect.math_sandbox as math_sandbox
 import sofa_mcp.architect.component_query as component_query
 import sofa_mcp.architect.scene_writer as scene_writer
@@ -32,6 +33,12 @@ def update_data_field(scene_path: str, object_name: str, field_name: str, new_va
 def run_and_extract(scene_path: str, steps: int, dt: float, node_path: str, field: str) -> dict:
     """Runs a SOFA simulation and extracts data from a specified field at each step. Results are saved to a file."""
     return stepping.run_and_extract(scene_path, steps, dt, node_path, field)
+
+
+@mcp.tool()
+def run_and_extract_multi(scene_path: str, steps: int, dt: float, fields: list[dict]) -> dict:
+    """Runs a SOFA simulation and extracts data from multiple fields/nodes in a single run. More efficient than calling run_and_extract repeatedly."""
+    return stepping.run_and_extract_multi(scene_path, steps, dt, fields)
 
 
 @mcp.tool()
@@ -97,6 +104,17 @@ def load_scene(scene_path: str) -> dict:
 def patch_scene(scene_path: str, patch: dict) -> dict:
     """Applies a structured text patch to an existing scene file."""
     return scene_writer.patch_scene(scene_path, patch)
+
+
+@mcp.tool()
+def generate_volume_mesh(
+    stl_path: str,
+    output_path: str = None,
+    mesh_size_factor: float = 1.0,
+    remove_duplicates: bool = True,
+) -> dict:
+    """Converts a surface STL file into a volumetric VTK mesh using GMSH. Output is loadable by SOFA's MeshVTKLoader."""
+    return mesh_generator.generate_volume_mesh(stl_path, output_path, mesh_size_factor, remove_duplicates)
 
 
 @mcp.tool()
