@@ -75,33 +75,7 @@ Every valid SOFA scene must satisfy these structural requirements:
     ```
 *   **Mandatory Header:** Every `curl` request to the server **MUST** include `-H "Accept: application/json"`. Failure to do so will result in a `406 Not Acceptable` error.
 
-### 2. `get_mesh_bounding_box`
-
-*   **Description:** Reads a mesh file and returns its minimum and maximum bounding box coordinates.
-*   **Parameters:**
-    *   `mesh_path` (string, required): The file path to the mesh.
-*   **Usage:**
-    ```bash
-    curl -X POST http://127.0.0.1:8000/mcp \
-      -H "Content-Type: application/json" \
-      -H "Accept: application/json" \
-      -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"get_mesh_bounding_box","arguments":{"mesh_path":"<mesh_path>"}}}'
-    ```
-
-### 3. `inspect_mesh_topology`
-
-*   **Description:** Reads a mesh file and determines if it is a volumetric mesh or a surface mesh.
-*   **Parameters:**
-    *   `mesh_path` (string, required): The file path to the mesh.
-*   **Usage:**
-    ```bash
-    curl -X POST http://127.0.0.1:8000/mcp \
-      -H "Content-Type: application/json" \
-      -H "Accept: application/json" \
-      -d '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"inspect_mesh_topology","arguments":{"mesh_path":"<mesh_path>"}}}'
-    ```
-
-### 4. `resolve_asset_path`
+### 2. `resolve_asset_path`
 
 *   **Description:** Expands `~`, resolves a filesystem path to an absolute path, and checks whether it exists.
 *   **Parameters:**
@@ -129,20 +103,7 @@ Every valid SOFA scene must satisfy these structural requirements:
             -d '{"jsonrpc":"2.0","id":4,"method":"tools/call","params":{"name":"mesh_stats","arguments":{"mesh_path":"<mesh_path>"}}}'
         ```
 
-### 6. `run_math_script`
-
-*   **Description:** Executes a given Python script in a sandboxed environment and returns the output.
-*   **Parameters:**
-    *   `script` (string, required): A string containing the Python code to execute.
-*   **Usage:**
-    ```bash
-    curl -X POST http://127.0.0.1:8000/mcp \
-      -H "Content-Type: application/json" \
-      -H "Accept: application/json" \
-    -d '{"jsonrpc":"2.0","id":5,"method":"tools/call","params":{"name":"run_math_script","arguments":{"script":"<script>"}}}'
-    ```
-
-### 7. `query_sofa_component`
+### 5. `query_sofa_component`
 
 *   **Description:** Queries the SOFA framework's component registry for details about a specific component. This tool includes robust, multi-stage repair logic: it automatically attempts to load missing plugins and can accept a user-defined context to satisfy complex dependency requirements.
 *   **Parameters:**

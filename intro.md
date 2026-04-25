@@ -37,7 +37,6 @@ FastMCP Server  sofa_mcp/server.py  (HTTP :8000/mcp)
     +-- architect/   scene writing, validation, component queries
     +-- observer/    simulation stepping, data extraction
     +-- optimizer/   AST-based scene patching
-    +-- calibrator/  serial bridge for physical robots (stub)
     |
     v
 SOFA Runtime  +  meshes/  +  generated scene scripts
@@ -49,9 +48,9 @@ SOFA Runtime  +  meshes/  +  generated scene scripts
 | Category | Tools |
 |----------|-------|
 | Scene management | `validate_scene`, `summarize_scene`, `write_scene`, `write_and_test_scene`, `load_scene`, `patch_scene` |
-| Mesh / geometry | `mesh_stats`, `get_mesh_bounding_box`, `inspect_mesh_topology`, `find_indices_by_region`, `resolve_asset_path` |
+| Mesh / geometry | `mesh_stats`, `find_indices_by_region`, `resolve_asset_path`, `generate_volume_mesh` |
 | Component discovery | `query_sofa_component`, `search_sofa_components`, `get_plugins_for_components` |
-| Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `run_math_script`, `health_check` |
+| Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `health_check` |
 
 ---
 # Core Workflow

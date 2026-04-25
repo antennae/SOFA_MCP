@@ -8,7 +8,6 @@ from typing import Any
 from fastmcp import FastMCP
 import sofa_mcp.architect.mesh_inspector as mesh_inspector
 import sofa_mcp.architect.mesh_generator as mesh_generator
-import sofa_mcp.architect.math_sandbox as math_sandbox
 import sofa_mcp.architect.component_query as component_query
 import sofa_mcp.architect.scene_writer as scene_writer
 import sofa_mcp.observer.stepping as stepping
@@ -135,18 +134,6 @@ def generate_volume_mesh(
 
 
 @mcp.tool()
-def get_mesh_bounding_box(mesh_path: str) -> dict:
-    """Reads a mesh file and returns its bounding box."""
-    return mesh_inspector.get_mesh_bounding_box(mesh_path)
-
-
-@mcp.tool()
-def inspect_mesh_topology(mesh_path: str) -> str:
-    """Reads a mesh file and determines if it is a volumetric or surface mesh."""
-    return mesh_inspector.inspect_mesh_topology(mesh_path)
-
-
-@mcp.tool()
 def resolve_asset_path(path: str) -> dict:
     """Resolves an asset path (~ expansion + absolute path) and checks existence."""
     return mesh_inspector.resolve_asset_path(path)
@@ -156,12 +143,6 @@ def resolve_asset_path(path: str) -> dict:
 def mesh_stats(mesh_path: str) -> dict:
     """Returns mesh statistics (bbox, topology, counts) useful for scene generation."""
     return mesh_inspector.mesh_stats(mesh_path)
-
-
-@mcp.tool()
-def run_math_script(script: str) -> str:
-    """Runs a Python script in a sandboxed environment."""
-    return math_sandbox.run_math_script(script)
 
 
 @mcp.tool()
