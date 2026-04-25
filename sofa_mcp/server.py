@@ -12,6 +12,7 @@ import sofa_mcp.architect.math_sandbox as math_sandbox
 import sofa_mcp.architect.component_query as component_query
 import sofa_mcp.architect.scene_writer as scene_writer
 import sofa_mcp.observer.stepping as stepping
+import sofa_mcp.observer.renderer as renderer
 import sofa_mcp.optimizer.patcher as patcher
 
 # Create the MCP server instance
@@ -33,6 +34,28 @@ def update_data_field(scene_path: str, object_name: str, field_name: str, new_va
 def run_and_extract(scene_path: str, steps: int, dt: float, node_path: str, field: str) -> dict:
     """Runs a SOFA simulation and extracts data from a specified field at each step. Results are saved to a file."""
     return stepping.run_and_extract(scene_path, steps, dt, node_path, field)
+
+
+@mcp.tool()
+def render_scene_snapshot(
+    scene_path: str,
+    steps: int = 50,
+    dt: float = 0.01,
+    output_path: str = None,
+    image_size: tuple = (1024, 768),
+    background: str = "white",
+    show_edges: bool = False,
+) -> dict:
+    """Runs a SOFA scene for N steps and renders the final state to a PNG via offscreen PyVista. Auto-discovers MechanicalObjects and uses sibling OglModel colors when available."""
+    return renderer.render_scene_snapshot(
+        scene_path=scene_path,
+        steps=steps,
+        dt=dt,
+        output_path=output_path,
+        image_size=image_size,
+        background=background,
+        show_edges=show_edges,
+    )
 
 
 @mcp.tool()

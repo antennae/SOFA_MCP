@@ -16,7 +16,16 @@ def gmsh_context(model_name: str, verbosity: int = 0):
     """Optimized GMSH context manager."""
     try:
         if not gmsh.isInitialized():
-            gmsh.initialize()
+            # gmsh.initialize() installs SIGINT/SIGTERM handlers via signal.signal,
+            # which Python forbids outside the main thread. FastMCP dispatches tool
+            # calls on worker threads, so suppress signal installation during init.
+            import signal as _signal
+            _orig_signal = _signal.signal
+            _signal.signal = lambda *a, **k: None
+            try:
+                gmsh.initialize()
+            finally:
+                _signal.signal = _orig_signal
 
         gmsh.model.add(model_name)
         gmsh.option.setNumber("General.Verbosity", verbosity)
