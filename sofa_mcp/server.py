@@ -7,6 +7,7 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 from typing import Any
 from fastmcp import FastMCP
 import sofa_mcp.architect.mesh_inspector as mesh_inspector
+import sofa_mcp.architect.mesh_generator as mesh_generator
 import sofa_mcp.architect.math_sandbox as math_sandbox
 import sofa_mcp.architect.component_query as component_query
 import sofa_mcp.architect.scene_writer as scene_writer
@@ -97,6 +98,17 @@ def load_scene(scene_path: str) -> dict:
 def patch_scene(scene_path: str, patch: dict) -> dict:
     """Applies a structured text patch to an existing scene file."""
     return scene_writer.patch_scene(scene_path, patch)
+
+
+@mcp.tool()
+def generate_volume_mesh(
+    stl_path: str,
+    output_path: str = None,
+    mesh_size_factor: float = 1.0,
+    remove_duplicates: bool = True,
+) -> dict:
+    """Converts a surface STL file into a volumetric VTK mesh using GMSH. Output is loadable by SOFA's MeshVTKLoader."""
+    return mesh_generator.generate_volume_mesh(stl_path, output_path, mesh_size_factor, remove_duplicates)
 
 
 @mcp.tool()
