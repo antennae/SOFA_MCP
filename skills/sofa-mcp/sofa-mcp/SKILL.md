@@ -33,17 +33,35 @@ When the user says "I want a SOFA scene that ...":
 
 ## Scene Health Rules (The Architect's Checklist)
 
-Every valid SOFA scene must satisfy:
+Agent-facing summary of what makes a SOFA scene physically well-formed. When the recommended class doesn't fit, look up alternatives in `references/component-alternatives.md` (organized by category) or call `search_sofa_components('keyword')` for live discovery.
 
-1. **Plugins:** every component class needs a corresponding `RequiredPlugin` (use `get_plugins_for_components` to resolve).
-2. **Animation Loop:** root must have either `FreeMotionAnimationLoop` (with constraints) or `DefaultAnimationLoop`.
-3. **Time Integration Solver:** every `MechanicalObject` needs an `EulerImplicitSolver` (or `RungeKutta4Solver`) in its ancestry.
-4. **Linear Solver:** implicit time solvers require a linear solver. Default to `SparseLDLSolver` with `template="CompressedRowSparseMatrixMat3x3d"` for FEM. Use `CGLinearSolver` only for very large meshes (>100k nodes).
-5. **Constraint Handling:** `FreeMotionAnimationLoop` requires a constraint solver at root and a constraint correction on each mechanical node. Reasonable defaults: `NNCGConstraintSolver` for forward-sim soft tissue/soft robotics, `QPInverseProblemSolver` for inverse-problem (`SoftRobots.Inverse`) scenes; `GenericConstraintCorrection` is a safe correction default. If you need other variants (`LCPConstraintSolver`, `BlockGaussSeidelConstraintSolver`, `LinearSolverConstraintCorrection`, etc.), use `search_sofa_components` to discover what your SOFA build offers and `get_plugins_for_components` to resolve plugins.
-6. **ForceField Mapping:** every `ForceField` must live in a node that has a `MechanicalObject`.
-7. **Topology Containers:** volumetric force fields (e.g., `TetrahedronFEMForceField`) require a matching topology container (e.g., `TetrahedronSetTopologyContainer`) or a generator like `RegularGridTopology`.
-8. **Visual Model:** for rendering, map the mechanical state to an `OglModel` or `VisualModel` via a `Mapping` (`IdentityMapping`, `BarycentricMapping`, etc.).
-9. **Visual Style (GUI only):** add a `VisualStyle` with `displayFlags="showBehavior"` if the scene will be opened in `runSofa`.
+1. **Plugins.** Every component class needs a `RequiredPlugin`. Resolve via `get_plugins_for_components`.
+
+2. **Animation Loop.** Use `FreeMotionAnimationLoop` if the scene has any `*LagrangianConstraint`, `*Actuator`, or `*ConstraintCorrection`; `DefaultAnimationLoop` otherwise. Don't omit the loop — SOFA silently auto-instantiates `DefaultAnimationLoop`, hiding constraint-related bugs.
+
+3. **Time Integration.** Every unmapped `MechanicalObject` needs an integrator in its ancestry. Default: `EulerImplicitSolver` for almost everything; `EulerExplicitSolver` only for explicit dynamics with bounded stiffness.
+
+4. **Linear Solver.** Implicit ODE solvers need a linear solver in the same node or a descendant (an ancestor's solver does NOT count). Recommended: `SparseLDLSolver` with `template="CompressedRowSparseMatrixMat3x3d"`. Backup: `CGLinearSolver` for very large systems where direct factorization is too expensive.
+
+5. **Constraint Handling.** Under `FreeMotionAnimationLoop`, two distinct components are required:
+   - **Constraint solver** at root: `NNCGConstraintSolver` for forward simulation, `QPInverseProblemSolver` for any inverse-problem scene (any class from the `SoftRobots.Inverse` plugin requires `QPInverseProblemSolver`).
+   - **Constraint correction** in each deformable subtree: `GenericConstraintCorrection` is the safe default.
+
+6. **ForceField Mapping.** Every `ForceField` must reach a `MechanicalObject`. Most force fields look up the `MechanicalObject` in their ancestor chain; pair/mixed-interaction force fields (e.g. `SpringForceField`, `JointSpringForceField`) instead reference two MOs explicitly via `object1`/`object2` Data fields, which may live in different subtrees.
+
+7. **Topology Containers.** Volumetric force fields (e.g. `TetrahedronFEMForceField`) need a volumetric topology container or mesh. `BarycentricMapping`'s parent must be volumetric — except when the parent has a shell FEM like `TriangularFEMForceField` or `QuadBendingFEMForceField`.
+
+8. **Collision pipeline.** If any node has a `*CollisionModel`, the root needs five components. Defaults: `CollisionPipeline`, `BruteForceBroadPhase`, `BVHNarrowPhase`, `MinProximityIntersection` (or `LocalMinDistance` for tighter contacts), `CollisionResponse`.
+
+9. **Units consistency.** Pick SI or mm/g/s and stay internally consistent. Detect from gravity magnitude `|g|`:
+    - `|g| ≈ 9.81` → SI; `youngModulus < 100` is suspicious
+    - `|g| ≈ 9810` → mm/g/s; `youngModulus > 1e9` is suspicious
+    - `|g| ≈ 9180` → likely typo of `-9810`
+
+## Visual setup tips (reference, not enforced)
+
+- **Visual Model:** for rendering, map the mechanical state to an `OglModel` via `IdentityMapping` or `BarycentricMapping`. Other registered concrete classes: `VisualModelImpl`, `CylinderVisualModel`, `VisualMesh`, `OglShaderVisualModel`. (`VisualModel` is an abstract base class; `addObject("VisualModel")` works at runtime as an alias to `VisualModelImpl`.)
+- **Visual Style:** for GUI runs, add a `VisualStyle` at root with `displayFlags="showBehaviorModels showForceFields showVisual"`.
 
 ## Tool reference
 
@@ -61,6 +79,6 @@ For raw HTTP/curl debugging (rarely needed — agents use the MCP transport dire
 
 ## Conventions
 
-- All scenes use **[mm, g, s]** units.
 - The scene file must define `def createScene(rootNode):`.
+- Pick one unit system per scene and stay internally consistent (Rule 9 enforces this). Common choices: SI (`gravity=(0,-9.81,0)`, YM in Pa) or mm/g/s (`gravity=(0,-9810,0)`).
 - After writing, a scene can be opened in `runSofa` via `runSofa <scene>.py` for human GUI inspection.
