@@ -105,7 +105,7 @@ def mcp_server_url(tmp_path_factory):
         log.close()
 
 
-def _call_summarize(url: str, content: str) -> dict:
+def _call_tool(url: str, tool_name: str, args: dict) -> dict:
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
 
@@ -113,9 +113,7 @@ def _call_summarize(url: str, content: str) -> dict:
         async with streamable_http_client(url) as (read, write, _):
             async with ClientSession(read, write) as session:
                 await session.initialize()
-                return await session.call_tool(
-                    "summarize_scene", {"script_content": content}
-                )
+                return await session.call_tool(tool_name, args)
 
     result = asyncio.run(_go())
     text = "".join(getattr(c, "text", "") for c in result.content)
@@ -125,8 +123,12 @@ def _call_summarize(url: str, content: str) -> dict:
         # Surface the raw text — encoding regressions appear here as a FastMCP
         # error string ("Error calling tool ...: 'ascii' codec can't encode...").
         raise AssertionError(
-            f"summarize_scene over MCP returned non-JSON: {text[:500]}"
+            f"{tool_name} over MCP returned non-JSON: {text[:500]}"
         ) from exc
+
+
+def _call_summarize(url: str, content: str) -> dict:
+    return _call_tool(url, "summarize_scene", {"script_content": content})
 
 
 # Scene that triggers Rule 4 with severity=error. The trigger guarantees the wrapper
@@ -187,3 +189,26 @@ def test_summarize_scene_round_trip_over_mcp(mcp_server_url):
         f"expected rule_4 error, got {rule_4[0]['severity']}"
     )
     assert "linear solver" in rule_4[0]["message"].lower()
+
+
+def test_diagnose_scene_round_trip_over_mcp(mcp_server_url, tmp_path):
+    """Exercise diagnose_scene over the real MCP transport.
+
+    Catches the same encoding/JSON-shape regressions for the new tool. Uses
+    the in-repo cantilever beam fixture so we don't need to write a tempfile
+    inside the spawned server process.
+    """
+    scene_path = os.path.join(PROJECT_ROOT, "archiv", "cantilever_beam.py")
+    assert os.path.exists(scene_path), "cantilever_beam.py fixture missing"
+
+    parsed = _call_tool(
+        mcp_server_url,
+        "diagnose_scene",
+        {"scene_path": scene_path, "steps": 5, "dt": 0.01},
+    )
+
+    assert parsed.get("success") is True, f"diagnose failed over MCP: {parsed}"
+    assert "metrics" in parsed
+    assert "anomalies" in parsed and isinstance(parsed["anomalies"], list)
+    assert "scene_summary" in parsed
+    assert parsed["metrics"].get("nan_first_step") is None

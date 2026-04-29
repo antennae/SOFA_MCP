@@ -12,6 +12,7 @@ import sofa_mcp.architect.component_query as component_query
 import sofa_mcp.architect.scene_writer as scene_writer
 import sofa_mcp.observer.stepping as stepping
 import sofa_mcp.observer.renderer as renderer
+import sofa_mcp.observer.diagnostics as diagnostics
 import sofa_mcp.optimizer.patcher as patcher
 
 # Create the MCP server instance
@@ -163,6 +164,17 @@ def get_plugins_for_components(component_names: list[str], context_components: l
     For a list of SOFA component names, returns a mapping to their required plugins.
     """
     return component_query.get_plugins_for_components(component_names, context_components=context_components)
+
+
+@mcp.tool()
+def diagnose_scene(
+    scene_path: str,
+    complaint: str = None,
+    steps: int = 50,
+    dt: float = 0.01,
+) -> dict:
+    """Runs a sanity report for a SOFA scene: structural anomalies (Health Rules) plus per-step metrics (max displacement, max force, NaN-first-step) on every unmapped MechanicalObject. `complaint` is accepted for forward-compat and currently unused."""
+    return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt)
 
 
 if __name__ == "__main__":
