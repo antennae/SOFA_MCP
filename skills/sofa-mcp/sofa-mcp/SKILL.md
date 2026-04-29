@@ -31,6 +31,14 @@ When the user says "I want a SOFA scene that ...":
 
 **For visual feedback:** after step 7, call `render_scene_snapshot(scene_path, steps=N)` to get a PNG of the final state. Useful for verifying the simulation produces the deformation you expected.
 
+## Workflow: debug an existing scene that runs but misbehaves
+
+When the user says "this scene runs but the behavior is wrong" (robot doesn't move, deformation too small, things pass through, position explodes), this is a **behavioral bug**, not an authoring bug. There's no traceback; the scene is physically wrong.
+
+The loop is: **symptom → structure check → run + measure → hypothesis → modify minimally → re-measure**. Don't recommend a fix without running the modified scene to falsify or confirm.
+
+For the full investigative procedure, the symptom-to-hypothesis table, and a worked example, read `references/debugging-playbook.md`.
+
 ## Scene Health Rules (The Architect's Checklist)
 
 Agent-facing summary of what makes a SOFA scene physically well-formed. When the recommended class doesn't fit, look up alternatives in `references/component-alternatives.md` (organized by category) or call `search_sofa_components('keyword')` for live discovery.
