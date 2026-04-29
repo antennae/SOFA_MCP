@@ -168,10 +168,11 @@ def get_plugins_for_components(component_names: list[str], context_components: l
 if __name__ == "__main__":
     from sofa_mcp.architect.plugin_cache import generate_and_save_plugin_map
     generate_and_save_plugin_map()
+    port = int(os.environ.get("SOFA_MCP_PORT", "8000"))
     mcp.run(
         transport="streamable-http",
         host="127.0.0.1",
-        port=8000,
+        port=port,
         path="/mcp",
         stateless_http=True,
         json_response=True,
