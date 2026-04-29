@@ -100,6 +100,111 @@ def _node_is_mapped(node):
     return False
 
 
+def _plugin_cache_empty():
+    """Heuristic: a healthy plugin cache contains hundreds of entries (the
+    project plugin map has >500). Below the threshold means the cache file
+    was missing or never built — every plugin-prefix predicate then silently
+    no-ops, so callers should know.
+    """
+    return len(_PLUGIN_FOR_CLASS) < 100
+
+
+_PRINTLOG_PLUGIN_PREFIXES = (
+    "Sofa.Component.Constraint.Lagrangian.Solver",
+    "Sofa.Component.Constraint.Lagrangian.Correction",
+    "Sofa.Component.AnimationLoop",
+    "Sofa.Component.ODESolver.",
+)
+
+_PRINTLOG_NAME_SUFFIXES = (
+    "AnimationLoop",
+    "Solver",
+    "ConstraintCorrection",
+)
+
+
+def _is_printlog_target(cls):
+    if cls in _PLUGIN_FOR_CLASS:
+        # Class is attributed — trust plugin attribution exclusively. Avoids
+        # catching e.g. SparseLDLSolver via endswith("Solver").
+        return any(_PLUGIN_FOR_CLASS[cls].startswith(p) for p in _PRINTLOG_PLUGIN_PREFIXES)
+    # Fallback for core-builtin classes that aren't in the plugin cache (e.g.,
+    # DefaultAnimationLoop). Class-name suffix.
+    return any(cls.endswith(s) for s in _PRINTLOG_NAME_SUFFIXES)
+
+
+def _is_constraint_solver_class(cls):
+    plugin = _PLUGIN_FOR_CLASS.get(cls, "")
+    return plugin.startswith("Sofa.Component.Constraint.Lagrangian.Solver")
+
+
+def _is_ode_solver_class(cls):
+    plugin = _PLUGIN_FOR_CLASS.get(cls, "")
+    return plugin.startswith("Sofa.Component.ODESolver.")
+
+
+def _activate_printlog(root):
+    """Toggle printLog=True on every constraint/ODE solver, animation loop,
+    and constraint correction in the tree. Returns list of activated paths.
+
+    Each toggle is independently wrapped in try/except — components without
+    a `printLog` Data field (rare but possible) must not abort the walk.
+    """
+    activated = []
+    for node, node_path in _iter_nodes(root):
+        for obj in getattr(node, "objects", []):
+            cls = _safe_class_name(obj)
+            if not _is_printlog_target(cls):
+                continue
+            try:
+                d = obj.findData("printLog")
+                if d is not None:
+                    d.value = True
+                    activated.append(f"{node_path}::{cls}")
+            except Exception:
+                # Field missing or read-only on this class — don't abort the walk.
+                continue
+    return activated
+
+
+def _check_multimapping_node_has_solver(root):
+    """§6.C.1 — a node carrying a *MultiMapping in its `objects` must NOT
+    also carry an ODE solver in the same node. SOFA's MechanicalIntegration
+    visitor detaches output DoFs from the parent integration when a
+    MultiMapping is present, so a co-located solver runs against state it
+    cannot integrate.
+
+    Predicate is strictly node-local on each side (mapping AND solver in
+    the same `node.objects` list). Plugin attribution gates "is this a SOFA
+    mapping at all"; the `MultiMapping` suffix is the secondary filter
+    within the mapping plugin.
+    """
+    anomalies = []
+    for node, node_path in _iter_nodes(root):
+        class_names = [_safe_class_name(obj) for obj in getattr(node, "objects", [])]
+        has_multimapping = any(
+            _is_mapping_class(cls) and cls.endswith("MultiMapping")
+            for cls in class_names
+        )
+        if not has_multimapping:
+            continue
+        has_ode_solver = any(_is_ode_solver_class(cls) for cls in class_names)
+        if not has_ode_solver:
+            continue
+        anomalies.append({
+            "rule": "multimapping_node_has_solver",
+            "severity": "error",
+            "subject": node_path,
+            "message": (
+                "Node carries a *MultiMapping and an ODE solver in the same "
+                "node. The MultiMapping detaches output DoFs from the parent "
+                "integration; the solver here runs against state it cannot "
+                "integrate."
+            ),
+        })
+    return anomalies
+
+
 # =============================================================================
 # Numeric helpers (no numpy: keeps payload light and avoids the import in the
 # critical path; SOFA's MechanicalObject already returns numpy arrays which we
@@ -188,6 +293,53 @@ def _collect_unmapped_mos(root):
     return found
 
 
+def _collect_capture_targets(root):
+    """Find constraint solvers and QP solvers anywhere in the tree.
+
+    Returns (constraint_solvers, qp_solvers) where each is a list of
+    (path, obj) tuples. The path uses the parent-node path (where the
+    solver was added), matching the keying convention used elsewhere.
+    """
+    constraint_solvers = []
+    qp_solvers = []
+    for node, path in _iter_nodes(root):
+        for obj in getattr(node, "objects", []):
+            cls = _safe_class_name(obj)
+            if _is_constraint_solver_class(cls):
+                # Distinct path so multiple solvers on the same node don't collide.
+                constraint_solvers.append((f"{path}::{cls}", obj))
+            if cls == "QPInverseProblemSolver":
+                qp_solvers.append((f"{path}::{cls}", obj))
+    return constraint_solvers, qp_solvers
+
+
+def _initial_extent(rows):
+    """Max axis extent of a position list. Returns 0.0 for empty/degenerate input."""
+    if not rows:
+        return 0.0
+    try:
+        first = list(rows[0])
+    except Exception:
+        return 0.0
+    dims = len(first)
+    if dims == 0:
+        return 0.0
+    mins = [float("inf")] * dims
+    maxs = [float("-inf")] * dims
+    for row in rows:
+        try:
+            for k in range(dims):
+                v = float(row[k])
+                if v < mins[k]:
+                    mins[k] = v
+                if v > maxs[k]:
+                    maxs[k] = v
+        except Exception:
+            return 0.0
+    extents = [maxs[k] - mins[k] for k in range(dims)]
+    return max(extents) if extents else 0.0
+
+
 # =============================================================================
 # Scene summary
 # =============================================================================
@@ -245,21 +397,83 @@ def _load_scene_module(scene_path):
     return mod
 
 
-def _run(scene_path, steps, dt):
+def _empty_payload():
+    """Skeleton payload — every key the parent reads must be present so that
+    failure-path responses share the same shape as success ones."""
+    return {
+        "success": False,
+        "metrics": {
+            "nan_first_step": None,
+            "max_displacement_per_mo": {},
+            "max_force_per_mo": {},
+        },
+        "init_stdout_findings": [],
+        "scene_summary": {
+            "node_count": 0,
+            "class_counts": {},
+            "actuators_only": False,
+        },
+        "extents_per_mo": {},
+        "solver_iterations": {},
+        "solver_max_iterations": {},
+        "objective_series": {},
+        "structural_anomalies": [],
+        "printLog_activated": [],
+        "plugin_cache_empty": False,
+    }
+
+
+def _run(scene_path, steps, dt, payload):
+    """Populate `payload` in-place. Re-raises on failure so main() can attach
+    the error/traceback to whatever partial state was already filled in.
+    """
     import Sofa.Core
     import Sofa.Simulation
 
     mod = _load_scene_module(scene_path)
     root = Sofa.Core.Node("root")
     mod.createScene(root)
+
+    # Pre-init walk: structural smell tests and printLog activation. Both are
+    # safe to do post-construction but pre-init.
+    payload["structural_anomalies"] = _check_multimapping_node_has_solver(root)
+    payload["printLog_activated"] = _activate_printlog(root)
+    payload["plugin_cache_empty"] = _plugin_cache_empty()
+
     Sofa.Simulation.init(root)
+
+    payload["scene_summary"] = _scene_summary(root)
 
     mos = _collect_unmapped_mos(root)
     initial_positions = {path: _read_field_as_rows(mo, "position") for path, mo in mos}
+    extents_per_mo = {}
+    for path, _ in mos:
+        ext = _initial_extent(initial_positions.get(path, []))
+        if ext > 0:
+            extents_per_mo[path] = ext
+    payload["extents_per_mo"] = extents_per_mo
+
+    constraint_solvers, qp_solvers = _collect_capture_targets(root)
+    solver_max_iterations = {}
+    for path, obj in constraint_solvers:
+        v = _data_value(obj, "maxIterations")
+        if v is not None:
+            try:
+                solver_max_iterations[path] = int(v)
+            except Exception:
+                pass
+    payload["solver_max_iterations"] = solver_max_iterations
+
+    solver_iterations = {path: [] for path, _ in constraint_solvers}
+    objective_series = {path: [] for path, _ in qp_solvers}
+    payload["solver_iterations"] = solver_iterations
+    payload["objective_series"] = objective_series
 
     max_displacement = {path: 0.0 for path, _ in mos}
     max_force = {path: 0.0 for path, _ in mos}
-    nan_first_step = None
+    metrics = payload["metrics"]
+    metrics["max_displacement_per_mo"] = max_displacement
+    metrics["max_force_per_mo"] = max_force
 
     for step_idx in range(int(steps)):
         Sofa.Simulation.animate(root, float(dt))
@@ -267,8 +481,8 @@ def _run(scene_path, steps, dt):
             pos = _read_field_as_rows(mo, "position")
             force = _read_field_as_rows(mo, "force")
             if _has_nan_or_inf(pos) or _has_nan_or_inf(force):
-                if nan_first_step is None:
-                    nan_first_step = step_idx
+                if metrics["nan_first_step"] is None:
+                    metrics["nan_first_step"] = step_idx
                 continue
             disp = _displacement_max(pos, initial_positions.get(path, []))
             if disp > max_displacement[path]:
@@ -277,16 +491,25 @@ def _run(scene_path, steps, dt):
             if fmag > max_force[path]:
                 max_force[path] = fmag
 
-    return {
-        "success": True,
-        "metrics": {
-            "nan_first_step": nan_first_step,
-            "max_displacement_per_mo": max_displacement,
-            "max_force_per_mo": max_force,
-        },
-        "init_stdout_findings": [],
-        "scene_summary": _scene_summary(root),
-    }
+        for path, obj in constraint_solvers:
+            v = _data_value(obj, "currentIterations")
+            if v is None:
+                continue
+            try:
+                solver_iterations[path].append(int(v))
+            except Exception:
+                pass
+
+        for path, obj in qp_solvers:
+            v = _data_value(obj, "objective")
+            if v is None:
+                continue
+            try:
+                objective_series[path].append(float(v))
+            except Exception:
+                pass
+
+    payload["success"] = True
 
 
 def _write_payload(output_json_path, payload):
@@ -315,29 +538,15 @@ def main():
         sys.exit(2)
     output_json_path = sys.argv[4]
 
+    payload = _empty_payload()
     try:
-        payload = _run(scene_path, steps, dt)
+        _run(scene_path, steps, dt, payload)
     except Exception as exc:
+        payload["success"] = False
+        payload["error"] = str(exc)
+        payload["traceback"] = traceback.format_exc()
         try:
-            _write_payload(
-                output_json_path,
-                {
-                    "success": False,
-                    "error": str(exc),
-                    "traceback": traceback.format_exc(),
-                    "metrics": {
-                        "nan_first_step": None,
-                        "max_displacement_per_mo": {},
-                        "max_force_per_mo": {},
-                    },
-                    "init_stdout_findings": [],
-                    "scene_summary": {
-                        "node_count": 0,
-                        "class_counts": {},
-                        "actuators_only": False,
-                    },
-                },
-            )
+            _write_payload(output_json_path, payload)
         except Exception:
             pass
         traceback.print_exc()

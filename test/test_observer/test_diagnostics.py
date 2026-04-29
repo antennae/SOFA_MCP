@@ -1,4 +1,4 @@
-"""Tests for diagnostics.diagnose_scene (Step 2).
+"""Tests for diagnostics.diagnose_scene (Steps 2 + 3).
 
 Coverage:
   - Happy path: archiv/cantilever_beam.py runs, displacement non-zero, no NaN.
@@ -8,10 +8,16 @@ Coverage:
     fires deterministically.
   - createScene raises: an explicit RuntimeError inside createScene; runner
     exits non-zero, parent returns success=False with anomalies still attached.
+  - Step 3 runner extensions: structural §6.C check, printLog activation, and
+    capture-target population — exercised via the runner subprocess directly
+    (parent-side smell tests live in commit 2).
 """
 
+import json
 import os
+import subprocess
 import sys
+import tempfile
 
 import pytest
 
@@ -21,6 +27,8 @@ from sofa_mcp.observer import diagnostics
 
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PYTHON = os.path.expanduser("~/venv/bin/python")
+RUNNER = os.path.join(PROJECT_ROOT, "sofa_mcp", "observer", "_diagnose_runner.py")
+FIXTURES_DIR = os.path.join(os.path.dirname(__file__), "fixtures")
 
 if not os.path.exists(PYTHON):
     pytest.skip("SOFA env (~/venv with SofaPython3) not available", allow_module_level=True)
@@ -129,3 +137,125 @@ def test_diagnose_scene_create_scene_raises(tmp_path):
         f"expected the RuntimeError message in error/traceback; got error={result.get('error')!r}, "
         f"traceback={result.get('traceback')!r}"
     )
+
+
+# =============================================================================
+# Step 3 commit 1: runner extensions
+# =============================================================================
+
+
+def _run_runner_directly(scene_path, steps=0, dt=0.01):
+    """Spawn the runner subprocess and return the parsed JSON payload.
+
+    Used to exercise runner-side state (structural anomalies, printLog
+    activation, capture targets) without going through the parent
+    orchestrator — the parent's smell-test consumers ship in commit 2.
+    """
+    with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False) as tmp:
+        out_path = tmp.name
+    try:
+        subprocess.run(
+            [PYTHON, RUNNER, scene_path, str(steps), str(dt), out_path],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=120,
+            check=False,
+        )
+        with open(out_path, "r", encoding="utf-8") as f:
+            return json.load(f)
+    finally:
+        try:
+            os.remove(out_path)
+        except OSError:
+            pass
+
+
+def test_runner_structural_anomaly_multimapping_node_has_solver():
+    """§6.C.1 trigger: a node with both *MultiMapping and an ODE solver lifts
+    a structural anomaly from the runner. steps=0 keeps the run inside init
+    only — animate is unsafe with a SubsetMultiMapping that shares a node
+    with an ODE solver (SOFA segfaults during integration).
+    """
+    fixture = os.path.join(FIXTURES_DIR, "multimapping_with_solver.py")
+    assert os.path.exists(fixture)
+
+    payload = _run_runner_directly(fixture, steps=0)
+
+    structural = payload["structural_anomalies"]
+    assert isinstance(structural, list) and structural, (
+        f"expected at least one structural anomaly; got {structural}"
+    )
+    rule_hits = [a for a in structural if a.get("rule") == "multimapping_node_has_solver"]
+    assert rule_hits, f"missing multimapping_node_has_solver; saw rules {[a.get('rule') for a in structural]}"
+    assert rule_hits[0]["severity"] == "error"
+    assert rule_hits[0]["subject"] == "/root/combined"
+    assert {"rule", "severity", "subject", "message"} <= set(rule_hits[0])
+
+
+def test_runner_printlog_activation_targets():
+    """Cantilever beam exercises the four printLog target categories
+    (animation loop, constraint solver, ODE solver, constraint correction)
+    plus negative cases (linear solver should NOT activate, MechanicalObject
+    should NOT activate).
+    """
+    scene = os.path.join(PROJECT_ROOT, "archiv", "cantilever_beam.py")
+    payload = _run_runner_directly(scene, steps=0)
+
+    activated = payload["printLog_activated"]
+    assert payload["plugin_cache_empty"] is False, (
+        "test environment should have a populated plugin cache"
+    )
+    # Positive cases.
+    assert any("FreeMotionAnimationLoop" in p for p in activated)
+    assert any("NNCGConstraintSolver" in p for p in activated)
+    assert any("EulerImplicitSolver" in p for p in activated)
+    assert any("GenericConstraintCorrection" in p for p in activated)
+    # Negative cases: linear solvers + MechanicalObjects must not be touched.
+    assert not any("SparseLDLSolver" in p for p in activated), (
+        f"SparseLDLSolver should not be a printLog target; got {activated}"
+    )
+    assert not any("MechanicalObject" in p for p in activated)
+
+
+def test_runner_capture_targets_extents_and_iterations():
+    """Cantilever beam: extents_per_mo populated for the unmapped beam MO;
+    solver_iterations + solver_max_iterations populated for NNCGConstraintSolver.
+    """
+    scene = os.path.join(PROJECT_ROOT, "archiv", "cantilever_beam.py")
+    payload = _run_runner_directly(scene, steps=3, dt=0.01)
+
+    extents = payload["extents_per_mo"]
+    assert "/root/beam" in extents, f"expected /root/beam extent; got {extents}"
+    # Beam grid is min=[-2,-2,0] max=[2,2,50] — max axis extent is 50.
+    assert extents["/root/beam"] == pytest.approx(50.0, abs=0.01)
+
+    iters_map = payload["solver_iterations"]
+    max_iters_map = payload["solver_max_iterations"]
+    nncg_keys = [k for k in iters_map if "NNCGConstraintSolver" in k]
+    assert nncg_keys, f"expected an NNCGConstraintSolver key; got {list(iters_map.keys())}"
+    nncg_key = nncg_keys[0]
+    # 3 steps → 3 currentIterations samples.
+    assert len(iters_map[nncg_key]) == 3
+    assert all(isinstance(i, int) for i in iters_map[nncg_key])
+    assert nncg_key in max_iters_map
+    assert max_iters_map[nncg_key] > 0
+
+
+def test_runner_objective_series_for_qp_solver():
+    """The QP-infeasible fixture has a QPInverseProblemSolver — objective
+    series should populate (one float per step) even though the QP is
+    actually infeasible (the solver still reports an objective each step).
+    """
+    fixture = os.path.join(FIXTURES_DIR, "qp_infeasible.py")
+    assert os.path.exists(fixture)
+
+    payload = _run_runner_directly(fixture, steps=4, dt=0.01)
+
+    series_map = payload["objective_series"]
+    qp_keys = [k for k in series_map if "QPInverseProblemSolver" in k]
+    assert qp_keys, f"expected a QPInverseProblemSolver objective series; got {list(series_map.keys())}"
+    series = series_map[qp_keys[0]]
+    assert len(series) == 4, f"expected 4 samples for 4 steps; got {series}"
+    assert all(isinstance(v, float) for v in series)
