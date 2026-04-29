@@ -192,11 +192,12 @@ def test_summarize_scene_round_trip_over_mcp(mcp_server_url):
 
 
 def test_diagnose_scene_round_trip_over_mcp(mcp_server_url, tmp_path):
-    """Exercise diagnose_scene over the real MCP transport.
+    """Exercise diagnose_scene over the real MCP transport on a clean scene.
 
     Catches the same encoding/JSON-shape regressions for the new tool. Uses
     the in-repo cantilever beam fixture so we don't need to write a tempfile
-    inside the spawned server process.
+    inside the spawned server process. Doubles as a 'no false positives' guard
+    — none of the §6.A/§6.B/§6.C smell-test slugs should appear here.
     """
     scene_path = os.path.join(PROJECT_ROOT, "archiv", "cantilever_beam.py")
     assert os.path.exists(scene_path), "cantilever_beam.py fixture missing"
@@ -212,3 +213,34 @@ def test_diagnose_scene_round_trip_over_mcp(mcp_server_url, tmp_path):
     assert "anomalies" in parsed and isinstance(parsed["anomalies"], list)
     assert "scene_summary" in parsed
     assert parsed["metrics"].get("nan_first_step") is None
+    # Step 3 forward-looking fields must survive transport.
+    for key in ("extents_per_mo", "solver_iterations", "objective_series",
+                "printLog_activated", "plugin_cache_empty"):
+        assert key in parsed, f"{key} missing from diagnose_scene response over MCP"
+    # No smell-test slugs should fire on a clean scene.
+    smell_slugs = {"excessive_displacement", "solver_iter_cap_hit",
+                   "inverse_objective_not_decreasing", "qp_infeasible_in_log",
+                   "multimapping_node_has_solver"}
+    fired = [a["rule"] for a in parsed["anomalies"] if a.get("rule") in smell_slugs]
+    assert not fired, f"clean scene fired smell-test slugs over MCP: {fired}"
+
+
+def test_diagnose_scene_smell_test_lifts_over_mcp(mcp_server_url):
+    """A scene that triggers §6.C surfaces the slug through the JSON-RPC
+    transport. Multimapping is the cheapest known-bad fixture (structural,
+    no animate steps required)."""
+    scene_path = os.path.join(
+        PROJECT_ROOT, "test", "test_observer", "fixtures", "multimapping_with_solver.py"
+    )
+    assert os.path.exists(scene_path), "multimapping_with_solver.py fixture missing"
+
+    parsed = _call_tool(
+        mcp_server_url,
+        "diagnose_scene",
+        {"scene_path": scene_path, "steps": 0, "dt": 0.01},
+    )
+
+    rules = [a.get("rule") for a in parsed.get("anomalies") or []]
+    assert "multimapping_node_has_solver" in rules, (
+        f"expected multimapping_node_has_solver in anomalies over MCP; got {rules}"
+    )

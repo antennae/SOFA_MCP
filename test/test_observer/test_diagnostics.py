@@ -259,3 +259,170 @@ def test_runner_objective_series_for_qp_solver():
     series = series_map[qp_keys[0]]
     assert len(series) == 4, f"expected 4 samples for 4 steps; got {series}"
     assert all(isinstance(v, float) for v in series)
+
+
+# =============================================================================
+# Step 3 commit 2: parent smell tests + truncation (pure-function unit tests)
+# =============================================================================
+
+
+def test_check_inverse_objective_flat_at_value_fires():
+    """Last 5 steps flat at 9.1, well above the 1e-6 at-optimum guard."""
+    series = {"/root::QP": [10, 9.5, 9.2, 9.1, 9.1, 9.1, 9.1, 9.1]}
+    out = diagnostics._check_inverse_objective_not_decreasing(series)
+    assert len(out) == 1
+    assert out[0]["rule"] == "inverse_objective_not_decreasing"
+    assert out[0]["subject"] == "/root::QP"
+    assert out[0]["objective_tail"] == [9.1, 9.1, 9.1, 9.1, 9.1]
+
+
+def test_check_inverse_objective_strictly_decreasing_does_not_fire():
+    """Strictly decreasing series must not fire — even with the absolute-
+    floor tolerance, big steps like 2 → 1 exceed any reasonable tol_abs.
+    """
+    series = {"/root::QP": [5, 4, 3, 2, 1, 0.5, 0.1, 0]}
+    out = diagnostics._check_inverse_objective_not_decreasing(series)
+    assert out == []
+
+
+def test_check_inverse_objective_at_optimum_does_not_fire():
+    """A series flat at 1e-7 is the at-optimum case the guard exists to
+    handle. Without obj[-1] > 1e-6 the rule would fire here because tol_abs
+    is small, but the at-optimum threshold blocks it.
+    """
+    series = {"/root::QP": [1e-7] * 8}
+    out = diagnostics._check_inverse_objective_not_decreasing(series)
+    assert out == []
+
+
+def test_check_inverse_objective_slight_increase_within_tol_fires():
+    """A tiny upward bump within tol_abs counts as flat. Last 5 transitions
+    are all within tol_abs = max(1e-9, 1e-6 * 3) = 3e-6, and obj[-1]=3 > 1e-6."""
+    series = {"/root::QP": [5, 4, 3, 3.0000001, 3, 3, 3, 3]}
+    out = diagnostics._check_inverse_objective_not_decreasing(series)
+    assert len(out) == 1
+
+
+def test_check_inverse_objective_short_series_does_not_fire():
+    """Series shorter than the window cannot fire."""
+    out = diagnostics._check_inverse_objective_not_decreasing({"/root::QP": [10, 9, 8]})
+    assert out == []
+    assert diagnostics._check_inverse_objective_not_decreasing({}) == []
+
+
+def test_check_qp_infeasible_in_log_counts_matches():
+    log = "QP infeasible at step 3\nblah blah\nQP infeasible at step 7"
+    out = diagnostics._check_qp_infeasible_in_log(log)
+    assert len(out) == 1
+    assert out[0]["rule"] == "qp_infeasible_in_log"
+    assert out[0]["match_count"] == 2
+    assert out[0]["severity"] == "error"
+
+
+def test_check_qp_infeasible_in_log_no_matches():
+    assert diagnostics._check_qp_infeasible_in_log("") == []
+    assert diagnostics._check_qp_infeasible_in_log("everything fine here") == []
+
+
+def test_truncate_log_under_budget_passes_through():
+    short = "x" * 100
+    assert diagnostics._truncate_log(short) == short
+
+
+def test_truncate_log_over_budget_uses_head_tail_split():
+    head_chars = 10
+    tail_chars = 20
+    text = "A" * head_chars + ("B\n" * 50) + "C" * tail_chars
+    out = diagnostics._truncate_log(text, head_chars=head_chars, tail_chars=tail_chars)
+    assert out.startswith("A" * head_chars)
+    assert out.endswith("C" * tail_chars)
+    assert "lines elided" in out
+    # Elided segment is "B\nB\n... B\n" — 50 newlines.
+    assert "<50 lines elided>" in out
+
+
+def test_check_excessive_displacement_two_tier():
+    metrics = {"max_displacement_per_mo": {"/a": 50.0, "/b": 500.0, "/c": 5050.0}}
+    extents = {"/a": 50.0, "/b": 50.0, "/c": 50.0}
+    out = diagnostics._check_excessive_displacement(metrics, extents)
+    by_subject = {a["subject"]: a for a in out}
+    assert "/a" not in by_subject  # ratio 1.0 — clean
+    assert by_subject["/b"]["severity"] == "warning"  # ratio 10.0
+    assert by_subject["/c"]["severity"] == "error"  # ratio 101.0
+
+
+def test_check_excessive_displacement_skips_missing_extent():
+    """A MO that has displacement but no recorded extent (degenerate or
+    single-point) is skipped — no anomaly fires, but caller still has the
+    raw displacement available in the metrics dict."""
+    metrics = {"max_displacement_per_mo": {"/a": 1000.0}}
+    extents = {}  # No extent recorded.
+    assert diagnostics._check_excessive_displacement(metrics, extents) == []
+
+
+def test_check_solver_iter_cap_hit_records_step_indices():
+    iters = {"/root::NNCG": [10, 10, 5, 10, 10]}
+    caps = {"/root::NNCG": 10}
+    out = diagnostics._check_solver_iter_cap_hit(iters, caps)
+    assert len(out) == 1
+    assert out[0]["rule"] == "solver_iter_cap_hit"
+    assert out[0]["steps_hit_cap"] == [0, 1, 3, 4]
+    assert out[0]["max_iterations"] == 10
+
+
+def test_check_solver_iter_cap_hit_no_hits():
+    iters = {"/root::NNCG": [3, 5, 7, 4, 9]}
+    caps = {"/root::NNCG": 10}
+    assert diagnostics._check_solver_iter_cap_hit(iters, caps) == []
+
+
+# =============================================================================
+# Step 3 commit 2: integration tests (full diagnose_scene round-trip)
+# =============================================================================
+
+
+def test_diagnose_scene_excessive_displacement_fixture():
+    fixture = os.path.join(FIXTURES_DIR, "excessive_displacement.py")
+    assert os.path.exists(fixture)
+    result = diagnostics.diagnose_scene(fixture, steps=5, dt=0.1)
+    assert result["success"] is True, f"fixture should run cleanly: {result.get('error')}"
+    hits = [a for a in result["anomalies"] if a.get("rule") == "excessive_displacement"]
+    assert hits, f"expected excessive_displacement anomaly; got {result['anomalies']}"
+    # Free-fall fixture lands in the warning band (10× ≤ ratio < 100×).
+    assert hits[0]["severity"] == "warning"
+    assert hits[0]["ratio"] >= 10.0
+
+
+def test_diagnose_scene_iter_cap_hit_fixture():
+    fixture = os.path.join(FIXTURES_DIR, "iter_cap_hit.py")
+    assert os.path.exists(fixture)
+    result = diagnostics.diagnose_scene(fixture, steps=5, dt=0.01)
+    assert result["success"] is True, f"fixture should run cleanly: {result.get('error')}"
+    hits = [a for a in result["anomalies"] if a.get("rule") == "solver_iter_cap_hit"]
+    assert hits, f"expected solver_iter_cap_hit anomaly; got {result['anomalies']}"
+    assert hits[0]["max_iterations"] == 2
+    # Cap is 2; we ran 5 steps; every step should hit the cap.
+    assert len(hits[0]["steps_hit_cap"]) == 5
+
+
+def test_diagnose_scene_qp_infeasible_fixture():
+    fixture = os.path.join(FIXTURES_DIR, "qp_infeasible.py")
+    assert os.path.exists(fixture)
+    result = diagnostics.diagnose_scene(fixture, steps=5, dt=0.01)
+    # `success` may be true (SOFA reports the infeasibility but doesn't crash).
+    hits = [a for a in result["anomalies"] if a.get("rule") == "qp_infeasible_in_log"]
+    assert hits, f"expected qp_infeasible_in_log anomaly; got {result['anomalies']}"
+    assert hits[0]["severity"] == "error"
+    assert hits[0]["match_count"] >= 1
+
+
+def test_diagnose_scene_multimapping_lifts_structural_anomaly():
+    """Runner produces structural_anomalies; orchestrator lifts them into
+    the response's `anomalies` list. steps=0 to keep init-only (animate
+    segfaults on this scene)."""
+    fixture = os.path.join(FIXTURES_DIR, "multimapping_with_solver.py")
+    assert os.path.exists(fixture)
+    result = diagnostics.diagnose_scene(fixture, steps=0, dt=0.01)
+    hits = [a for a in result["anomalies"] if a.get("rule") == "multimapping_node_has_solver"]
+    assert hits, f"expected multimapping_node_has_solver anomaly; got {result['anomalies']}"
+    assert hits[0]["subject"] == "/root/combined"
