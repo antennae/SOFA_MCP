@@ -1,6 +1,6 @@
 # SOFA_MCP — Completed Work Log
 
-*Last updated 2026-04-29 (Step 2 shipped)*
+*Last updated 2026-04-30 (Step 3 shipped)*
 
 This file is the historical record of work that has shipped. The forward-looking roadmap lives in `docs/plan.md`; the technical specification for the `diagnose_scene` toolkit lives in `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md`.
 
@@ -79,16 +79,42 @@ Manual smoke against 4 real third-party scenes + 6 synthesized fixtures, **first
 
 **Out of Step 2 scope, deferred to Step 3:** `printLog` toggling on solver classes, §6.A runtime smell tests, §6.B stdout regex, §6.C structural checks, log truncation. `init_stdout_findings` returned as `[]` placeholder.
 
+### Step 3 — Smell test catalog ✅ (2026-04-30)
+
+Six rules ship + printLog activation + log truncation, per the plan-mode design at `~/.claude/plans/cosmic-bubbling-salamander.md` (review trimmed 22 spec rules to 6). Two commits, each independently green:
+
+**Commit 1 — runner extensions** (`d313d32`):
+- `_diagnose_runner.py` ~+170 LOC. Pre-init walk runs §6.C `multimapping_node_has_solver` (plugin attribution + `endswith("MultiMapping")` filter, strictly node-local; verified against `MechanicalIntegrationVisitor.cpp:71`) and toggles `printLog=True` on constraint solvers, ODE solvers, animation loops, and constraint corrections. Predicate is two-tier: plugin attribution (primary) with class-name suffix fallback for core-builtin classes not in the plugin cache (e.g., `DefaultAnimationLoop`). The fallback only fires when the class is absent from `_PLUGIN_FOR_CLASS`, so `SparseLDLSolver` (linear, in-cache) is correctly excluded.
+- Post-init capture: per-MO initial bbox extent (`extents_per_mo`), constraint-solver `maxIterations` (`solver_max_iterations`); per-step capture of `currentIterations` (`solver_iterations`) and QP `objective` (`objective_series`).
+- Failure-path preservation: `_empty_payload()` skeleton populated in-place; `main`'s except writes whatever was filled, so structural anomalies and printLog state survive an init or animate Python exception.
+- Test fixtures land alongside: `multimapping_with_solver.py`, `qp_infeasible.py`. 4 new tests (call runner subprocess directly).
+
+**Commit 2 — parent smell tests + truncation** (`8c83055`):
+- `diagnostics.py` ~+170 LOC. Five pure functions: `_check_excessive_displacement` (10× warn / 100× err two-tier), `_check_solver_iter_cap_hit` (NNCG/BGS path; CG/LCP regex deferred), `_check_inverse_objective_not_decreasing` (window=5; relative+absolute tolerance with at-optimum guard `obj[-1] > 1e-6`), `_check_qp_infeasible_in_log` (regex with `match_count`), `_truncate_log` (5KB head + 25KB tail). Orchestrator runs smell tests on full pre-truncation log, lifts §6.C anomalies on both success and failure paths, then truncates.
+- `excessive_displacement.py` and `iter_cap_hit.py` fixtures land alongside.
+- 13 pure-fn unit tests + 4 integration tests + 2 MCP transport extensions (clean-scene no-false-positives + multimapping slug surfaces over JSON-RPC).
+
+**Prerequisite (verified before commit 1):** built `qp_infeasible.py` (CableActuator with inverted force bounds: minForce=100, maxForce=-100). Empirically confirmed `QP infeasible` appears 10× in `solver_logs` for 5 steps **without** printLog activation — SOFA emits it via `msg_warning`/`msg_error` from `QPInverseProblemImpl` (qpOASES rejection paths), bypassing the printLog gate. §6.B.2 has signal independent of printLog activation.
+
+**Empirical fixture calibration:**
+- `excessive_displacement.py`: 50mm beam free-falling under gravity, dt=0.1, 5 steps. Lands at 1472mm displacement / 50mm extent = 29.4× — squarely in the warning band, no NaN. No threshold tuning required.
+- `iter_cap_hit.py`: NNCG with `maxIterations=2, tolerance=1e-12` plus a `CableConstraint` that creates Lagrangian constraints. Every step hits the cap (5/5).
+
+**Smoke verification on archiv/:** cantilever_beam.py, tri_leg_cables.py, prostate.py, prostate_chamber.py — zero smell-test fires across all four (no false positives).
+
+**Test counts:** `test_diagnostics.py` grew from 4 → 25 tests; `test_mcp_transport.py` from 2 → 3. Full repo `pytest test/`: 72 passing, 8 pre-existing Phase-5 failures (test_scene_writer.py + test_stepping.py contract drift, unrelated to Step 3).
+
 ---
 
 ## Files created during completed work
 
 - `sofa_mcp/architect/_summary_runtime_template.py` (Step 1.5 runtime, ~690 LOC)
-- `sofa_mcp/observer/_diagnose_runner.py` (Step 2 subprocess runner, ~280 LOC)
-- `sofa_mcp/observer/diagnostics.py` (Step 2 parent orchestrator, ~180 LOC)
+- `sofa_mcp/observer/_diagnose_runner.py` (Step 2 subprocess runner, extended in Step 3, ~450 LOC)
+- `sofa_mcp/observer/diagnostics.py` (Step 2 parent orchestrator, extended in Step 3, ~360 LOC)
 - `test/test_architect/test_summarize_rules.py` (24 tests)
-- `test/test_architect/test_mcp_transport.py` (transport regression — summarize + diagnose)
-- `test/test_observer/test_diagnostics.py` (4 tests, Step 2)
+- `test/test_architect/test_mcp_transport.py` (transport regression — summarize + diagnose, 3 tests)
+- `test/test_observer/test_diagnostics.py` (25 tests after Step 3)
+- `test/test_observer/fixtures/{qp_infeasible,multimapping_with_solver,iter_cap_hit,excessive_displacement}.py` (Step 3 trigger fixtures)
 - `skills/sofa-mcp/sofa-mcp/references/debugging-playbook.md` (agent-facing investigative guide)
 - `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md` + `docs/specs/diagnose-scene-research/*` (12 rule-review files)
 - `sofa_mcp/observer/renderer.py` (Phase 1)
@@ -110,6 +136,7 @@ Manual smoke against 4 real third-party scenes + 6 synthesized fixtures, **first
 - Phase 6.1 Step 1.5: **~1 day** (vs estimated half day; ~690+600 LOC vs estimated 170+250 — over-estimate explained by per-rule helpers, link-vs-data field handling, and full-scene fixtures)
 - Phase 6.1 Step 1.5+: encoding fix + playbook + transport test, ~half day
 - Phase 6.1 Step 2: ~half a day (matched estimate; ~460 LOC impl + ~120 LOC tests, slightly under the ~440+~100 plan budget)
+- Phase 6.1 Step 3: ~half a day (under estimate; ~340 LOC impl + ~280 LOC tests = ~620 vs plan budget ~430. Test fixtures + uniform-shape failure paths cost more than the plan accounted for; smell-test logic itself was lighter than expected)
 
 ---
 

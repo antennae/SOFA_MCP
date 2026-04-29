@@ -1,6 +1,6 @@
 # SOFA_MCP — Portfolio Polish, Community-Ready Posture
 
-*Last updated 2026-04-29 (Step 2 shipped)* — forward-looking only. For completed work, see `docs/progress.md`. Technical reference for the diagnose toolkit lives in `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md`.
+*Last updated 2026-04-30 (Step 3 shipped)* — forward-looking only. For completed work, see `docs/progress.md`. Technical reference for the diagnose toolkit lives in `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md`.
 
 ## Context
 
@@ -28,7 +28,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 
 | Phase | Status | Notes |
 |---|---|---|
-| 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2 done (see progress.md); Steps 3–5 pending |
+| 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3 done (see progress.md); Steps 4–5 pending |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ pending | M3 gate |
 | 6.2 — Inverse-problem solver | ⏳ pending | M6 gate |
@@ -44,23 +44,9 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 
 Shipped — see `docs/progress.md` Step 2 entry. `diagnose_scene` MCP tool exists end-to-end; sanity-report shape (`success`, `metrics`, `anomalies`, `init_stdout_findings`, `solver_logs`, `scene_summary`) is the contract Step 3 fills out. Out-of-scope in Step 2 and explicitly stubbed for Step 3: `printLog` toggling, runtime/regex/structural smell tests, log truncation.
 
-### Step 3 — Smell test catalog ⏳ (review complete 2026-04-29 — ready to implement)
+### Step 3 — Smell test catalog ✅ (2026-04-30)
 
-Three categories: §6.A runtime checks, §6.B regex pattern matches, §6.C structural checks. Full spec at `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md` §Step 3.
-
-**Review outcome: 6 ship, 16 cut** (down from 22-rule original spec). Cuts followed a single principle: "MCP provides probes; agent reasons" — rules that re-extract values from `solver_logs` or `metrics` the agent already receives, rules that emit warnings without a confirmed precondition, and rules empirically verified to either crash before logging or never fire in modern SOFA were all cut.
-
-**Shipping set:**
-- **§6.A.3 `excessive_displacement`** — two-tier severity on max-disp / mesh-extent ratio (≥10× warning, ≥100× error). Replaces `nan_first_step` as the primary numerical-blowup detector since implicit ODE solvers rarely produce NaN.
-- **§6.A.6 `solver_iter_cap_hit`** — NNCG/BGS Data-field path + CG/LCP printLog regex path. One anomaly per (solver, run) with `steps_hit_cap: [...]` field.
-- **§6.A.13 `inverse_objective_not_decreasing`** — programmatic `d_objective` Data field read each step, fires on "non-decreasing for ≥5 consecutive steps AND value > 1e-6" (epsilon guard avoids at-optimum FP). QP-solver gated.
-- **§6.B.2 `qp_infeasible_in_log`** — regex against full log before truncation, with `steps_fired: [...]`. The one §6.B rule worth shipping (silent-failure case, can land in truncated middle).
-- **§6.C.1 `multimapping_node_has_solver`** — structural check at init, mechanism verified at four SOFA source locations.
-- Plus **runner-side printLog activation** (deferred from Step 2) and **log truncation** (5KB head + 25KB tail).
-
-**Side effect of review:** doc note on high Poisson ratio + linear tet FEM added to `skills/sofa-mcp/sofa-mcp/references/component-alternatives.md` (replacing what would have been a §6.A.14 anomaly rule).
-
-**Revised LOC estimate:** ~150 impl + ~100 tests = ~250 lines (down from ~530). Smaller scope, tighter rule set.
+Shipped — see `docs/progress.md` Step 3 entry. 6 rules + printLog activation + log truncation, all green in `pytest test/test_observer/test_diagnostics.py` (25 tests) and `test/test_architect/test_mcp_transport.py` (3 tests). Zero false positives on the four `archiv/` scenes. CG/LCP regex arm of `solver_iter_cap_hit` and per-step bucketing for `qp_infeasible_in_log` deferred to a future iteration when known-cap-hit fixtures and step-boundary-stable log formats are available.
 
 ### Step 4 — Probe library (4 probes) ⏳ (NEEDS REVIEW)
 
@@ -101,7 +87,7 @@ Rewrite around the demo. Hero: tri_leg_cables PNG + best `mcp_demo/*.webm` conve
 
 ## Suggested execution order
 
-**6.1 Step 3 (next)** → 6.1 Step 4 → 6.1 Step 5 → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 4 (README rewrite, last so it can showcase everything that actually works).
+**6.1 Step 4 (next)** → 6.1 Step 5 → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 4 (README rewrite, last so it can showcase everything that actually works).
 
 If energy is constrained: ship Phases 1–5 as v0.1 (portfolio-ready), sit on it, decide whether Phase 6.2 is worth the investment based on whether anyone actually finds and uses v0.1.
 
@@ -149,10 +135,10 @@ End-state check that proves the whole plan worked:
 
 ## Effort estimate (remaining work)
 
-- Phase 6.1 Steps 3-5: ~1 day
+- Phase 6.1 Steps 4-5: ~half a day
 - Phase 3: ~half a day
 - Phase 6.2: ~1 day
 - Phase 5: ~half a day
 - Phase 4: ~1 day
 
-**Remaining: ~4-5 days sequentially.** Less if phases parallelize. End state reads as a *capable* tool, not just a polished one. Phases 1-5 ship as v0.1 (portfolio-ready); 6.2 lands as v0.2 (the substantive features that earn the deeper claim).
+**Remaining: ~3-4 days sequentially.** Less if phases parallelize. End state reads as a *capable* tool, not just a polished one. Phases 1-5 ship as v0.1 (portfolio-ready); 6.2 lands as v0.2 (the substantive features that earn the deeper claim).
