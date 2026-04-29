@@ -2,7 +2,13 @@ import subprocess
 import tempfile
 import os
 import pathlib
+import json
 from typing import Dict, Any
+
+_SUMMARY_RUNTIME_TEMPLATE_PATH = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)),
+    "_summary_runtime_template.py",
+)
 
 
 def _build_scene_source(script_content: str) -> str:
@@ -88,118 +94,45 @@ if __name__ == "__main__":
     )
 
 
+def _load_plugin_map_for_wrapper() -> Dict[str, str]:
+    """Load the plugin cache for embedding into the wrapper (so the subprocess
+    doesn't have to load it itself)."""
+    try:
+        from . import plugin_cache  # type: ignore
+    except Exception:
+        return {}
+    cache_path = plugin_cache.get_cache_path()
+    if not os.path.exists(cache_path):
+        return {}
+    try:
+        with open(cache_path, "r") as f:
+            return json.load(f)
+    except (IOError, json.JSONDecodeError):
+        return {}
+
+
 def _build_summary_wrapper(create_scene_function: str) -> str:
-    preamble = _build_wrapper_preamble(create_scene_function, extra_imports="import json")
-    return (
-        preamble
-        + """
-# These are baseline solver objects added by add_solver(rootNode) under /root/solver_node.
-# We use this set only to estimate whether the user added any *additional* objects
-# under solver_node.
-SOLVER_BASELINE_CLASSES = {
-    'EulerImplicitSolver',
-    'SparseLDLSolver',
-    'GenericConstraintCorrection',
-}
+    """Assemble the summary subprocess script.
 
-def _iter_nodes(node, path="/"):
-    yield node, path
-    for child in getattr(node, 'children', []):
-        try:
-            child_name = child.getName() if hasattr(child, 'getName') else getattr(child, 'name', 'child')
-        except Exception:
-            child_name = 'child'
-        child_path = path.rstrip('/') + '/' + str(child_name)
-        yield from _iter_nodes(child, child_path)
+    Reads `_summary_runtime_template.py`, substitutes:
+      - the embedded plugin map (replaces `PLUGIN_FOR_CLASS = {}`)
+      - the user's createScene script (replaces the `# >>> USER_CREATE_SCENE <<<` marker)
+    """
+    template = pathlib.Path(_SUMMARY_RUNTIME_TEMPLATE_PATH).read_text(encoding="utf-8")
 
-def _safe_obj_name(obj):
-    try:
-        if hasattr(obj, 'getName'):
-            return obj.getName()
-    except Exception:
-        pass
-    return None
+    plugin_map = _load_plugin_map_for_wrapper()
+    plugin_literal = json.dumps(plugin_map, separators=(",", ":"))
 
-def _safe_class_name(obj):
-    try:
-        if hasattr(obj, 'getClassName'):
-            return obj.getClassName()
-    except Exception:
-        pass
-    return obj.__class__.__name__
+    plugin_sentinel = "PLUGIN_FOR_CLASS = {}  # __SOFA_MCP_PLUGIN_MAP_SENTINEL__"
+    user_sentinel = "# __SOFA_MCP_USER_CREATE_SCENE_SENTINEL__"
+    if plugin_sentinel not in template:
+        raise RuntimeError("Summary runtime template missing plugin-map sentinel.")
+    if user_sentinel not in template:
+        raise RuntimeError("Summary runtime template missing user-createScene sentinel.")
 
-def _get_template(obj):
-    try:
-        # Many SOFA objects have a 'template' data field
-        return str(obj.getData('template').getValue())
-    except:
-        return None
-
-def summarize():
-    root = Sofa.Core.Node("root")
-    try:
-        if 'createScene' not in globals():
-            print("ERROR: createScene function missing", file=sys.stderr)
-            sys.exit(1)
-
-        createScene(root)
-
-        nodes = []
-        class_counts = {}
-        object_count = 0
-        mechanical_object_count = 0
-
-        # These are classes that indicate the scene's health.
-        has_animation_loop = _tree_has_class(root, 'FreeMotionAnimationLoop') or _tree_has_class(root, 'DefaultAnimationLoop')
-        has_constraint_solver = _tree_has_class(root, 'NNCGConstraintSolver') or _tree_has_class(root, 'QPInverseProblemSolver')
-        has_time_integration = _tree_has_class(root, 'EulerImplicitSolver') or _tree_has_class(root, 'RungeKutta4Solver')
-
-        for node, path in _iter_nodes(root, "/root"):
-            try:
-                node_name = node.getName() if hasattr(node, 'getName') else getattr(node, 'name', None)
-            except Exception:
-                node_name = None
-
-            objects = []
-            for obj in getattr(node, 'objects', []):
-                class_name = _safe_class_name(obj)
-                obj_name = _safe_obj_name(obj)
-                template = _get_template(obj)
-                objects.append({"class": class_name, "name": obj_name, "template": template})
-
-                object_count += 1
-                class_counts[class_name] = class_counts.get(class_name, 0) + 1
-                if class_name == 'MechanicalObject':
-                    mechanical_object_count += 1
-
-            nodes.append({"path": path, "name": node_name, "objectCount": len(objects), "objects": objects})
-
-        checks = []
-        checks.append({"name": "has_animation_loop", "passed": has_animation_loop})
-        checks.append({"name": "has_constraint_solver", "passed": has_constraint_solver})
-        checks.append({"name": "has_time_integration", "passed": has_time_integration})
-
-        summary = {
-            "success": True,
-            "node_count": len(nodes),
-            "object_count": object_count,
-            "class_counts": class_counts,
-            "mechanical_object_count": mechanical_object_count,
-            "checks": checks,
-            "nodes": nodes,
-        }
-
-        # Prefix to allow robust parsing even if user code prints.
-        print("SCENE_SUMMARY_JSON:" + json.dumps(summary, separators=(",", ":")))
-    except Exception as e:
-        import traceback
-        traceback.print_exc()
-        sys.exit(1)
-
-if __name__ == "__main__":
-    summarize()
-"""
-    )
+    out = template.replace(plugin_sentinel, f"PLUGIN_FOR_CLASS = {plugin_literal}", 1)
+    out = out.replace(user_sentinel, create_scene_function, 1)
+    return out
 
 
 def validate_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, Any]:
@@ -213,7 +146,7 @@ def validate_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, Any
     create_scene_function = _build_scene_source(script_content)
     validation_wrapper = _build_validation_wrapper(create_scene_function)
 
-    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as tmp:
         tmp.write(validation_wrapper)
         tmp_path = tmp.name
 
@@ -267,7 +200,7 @@ def summarize_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, An
     create_scene_function = _build_scene_source(script_content)
     summary_wrapper = _build_summary_wrapper(create_scene_function)
 
-    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", delete=False) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as tmp:
         tmp.write(summary_wrapper)
         tmp_path = tmp.name
 
