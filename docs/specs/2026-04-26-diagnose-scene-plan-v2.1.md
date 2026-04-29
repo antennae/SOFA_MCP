@@ -383,42 +383,54 @@ target_set = {name for name in plugin_cache | object_factory_names()
 
 ### 3.1 §6.A — Per-step / runtime-data smell tests
 
-| Rule | Severity | Trigger | Implementation note |
-|---|---|---|---|
-| `nan_first_step` | error | first step where any MO `position`/`velocity`/`force` contains NaN/inf | already in Step 2 metrics |
-| `low_displacement` | warning | max disp per MO < 1e-3 mm over all steps | scope to unmapped MOs |
-| `excessive_displacement` | warning | max disp > 100× mesh extent | scale-aware threshold |
-| `low_assembled_forces` | warning | per-MO assembled `force` magnitude ~0 every step | per-MO; constraint-mediated forces don't appear here (note in message) |
-| `mo_static` | warning | unmapped MO has 0 motion across all steps | exempt mapped MOs |
-| `solver_iter_cap_hit` | warning | NNCG/BlockGaussSeidel: `currentIterations == maxIterations`. LCP/CG: regex `Iter=N` against maxIterations | branch on solver class (Agent 8) |
-| `visual_mechanical_diff` | warning | per-step *change* in OglModel positions diverges from mapped MO change by >1e-5 mm | compare changes, not absolutes (Agent 1 M8) |
-| `mapped_dof_zero_accel` | warning | mapped MO velocity doesn't change when net force ≠ 0 | catches SOFA #5999-class bugs (Agent 3) |
-| `child_only_motion` | warning | mapped child MO max disp >100× parent MO max disp **AND** parent_max_disp > 1mm (guard) | guard prevents infinite-ratio FP on fixed parents (Agent B5) |
-| `actuator_lambda_zero` | warning | all `lambda` entries in QP printLog block == 0 every step | parse `" lambda = ["` block (Agent C) |
-| `cable_negative_lambda` | warning | any cable lambda < 0 in QP printLog AND `minForce` is absent on the actuator | only fires when minForce unset; suggested fix: `minForce=0` (Agent C) |
-| `q_norm_blowup` | warning | regex `Relative variation of infinity norm through one step: ([\d.]+) %` matches >1000% on any step | percentage value; skip step 0 (countdown) (Agent C) |
-| `inverse_objective_not_decreasing` | warning | `d_objective` Data field non-decreasing over ≥5 consecutive steps | read scalar Data programmatically each step (Agent C — `d_objective`, NOT `d_graph`) |
-| `high_poisson_with_linear_tet` | tiered | `TetrahedronFEMForceField` with `poissonRatio` ≥ 0.45 / 0.49 / 0.499 | info / warning / error tiers; suggest `TetrahedronHyperelasticityFEMForceField` (Agent A) |
+> **Status: §6.A reviewed 2026-04-29 — 4 ship, 10 cut.** Cuts followed a single principle: "MCP provides probes; agent reasons" — rules that re-extract a value the agent already sees in `solver_logs` or `metrics` were cut, as were rules that emit warnings without a confirmed precondition (e.g., `low_displacement` warns when zero displacement is also the correct outcome of an unactuated/ungravitated scene).
+
+| Rule | Decision | Notes |
+|---|---|---|
+| `nan_first_step` | **shipped in Step 2** | already in Step 2 metrics; design note below explains it's a weak primary signal under implicit solvers |
+| `low_displacement` | cut | warns without precondition — zero displacement is correct for unactuated/ungravitated scenes; metric `max_displacement_per_mo` already in Step 2 |
+| `excessive_displacement` | **ship two-tier** | ≥10× extent → warning, ≥100× extent → error. Compute extent from initial-position bbox; skip if extent == 0. Unit-agnostic (ratio). Replaces `nan_first_step` as primary numerical-blowup detector. |
+| `low_assembled_forces` | cut | same critique as `low_displacement` — zero force is correct for any scene without force sources |
+| `mo_static` | cut | duplicate of `low_displacement` from a stricter angle |
+| `solver_iter_cap_hit` | **ship** | one anomaly per (solver, run) with `steps_hit_cap: [...]` field. NNCG/BlockGaussSeidel via Data field read (no printLog needed); CG/LCP via printLog regex (requires runner-side printLog activation, also Step 3) |
+| `visual_mechanical_diff` | cut | low actionability (no obvious fix), and natural mesh-resolution mismatch produces inherent error |
+| `mapped_dof_zero_accel` | cut | upstream bug (#5999) is fixed, class is rare, runner cost (capture mapped MOs) high vs. benefit |
+| `child_only_motion` | cut | bug class is hard to construct cleanly; FP class (rigid mappings with rotational parents — i.e., every robot scene this toolkit targets) is dominant |
+| `actuator_lambda_zero` | cut | re-extracts pattern already visible in `solver_logs` (which the agent receives); agent can spot `lambda = [0,0,0]` repeating |
+| `cable_negative_lambda` | cut | same as `actuator_lambda_zero` — log re-extraction |
+| `q_norm_blowup` | cut | same — regex on a log line the agent already sees |
+| `inverse_objective_not_decreasing` | **ship with epsilon guard** | reads `d_objective` Data field programmatically each step; trigger = "non-decreasing for ≥5 consecutive steps **AND** `d_objective > 1e-6`" — guard avoids at-optimum FP. Gated on QPInverseProblemSolver presence. |
+| `high_poisson_with_linear_tet` | cut + doc note | rule is more educational than diagnostic, and 0.45 threshold isn't well-grounded in literature for SOFA's tet formulation. Note added to `references/component-alternatives.md` ("FEM force fields — high Poisson ratio") describing the locking phenomenon without a specific threshold. |
+
+**Net §6.A rule set (4 surviving):** `nan_first_step` (Step 2), `excessive_displacement`, `solver_iter_cap_hit`, `inverse_objective_not_decreasing`.
+
+> **Design note (from Step 2 smoke testing, 2026-04-29):** `nan_first_step` is a weaker signal than expected when implicit ODE solvers are in use. Two manufactured-broken fixtures (`nan_explosion.py` with dt=10s on stiff material; `structural_violations.py` with the gravity `-9180` typo) both produced wildly unphysical displacement (192–206 mm on a 50 mm beam) but **no NaN** — `EulerImplicitSolver` damps the blowup enough to keep values finite. Treat `nan_first_step` as a "rare but unambiguous" signal and rely on `excessive_displacement` (max disp > 100× mesh extent) as the primary catch for blown-up integration. Worth being explicit in the rule docstring/error message that `nan_first_step` rarely fires under implicit solvers, so the agent doesn't conclude "no NaN ⇒ scene is fine."
 
 ### 3.2 §6.B — Init-time stdout regex smell tests + WARN catch-all
 
-| Rule | Severity | Regex (verified against SOFA source) |
+> **Status: §6.B reviewed 2026-04-29 — 1 ship, 6 cut.** Cuts driven by: (a) loud-failure cases that already surface as hard runner failures (B.1), (b) empirical verification that the message either crashes before logging (B.3) or no longer fires in modern SOFA (B.4), (c) overlap with existing health rules (B.5 ↔ Rule 1; B.6 ↔ Rules 2+5), (d) consistency with the §6.A pruning principle ("agent already has solver_logs" — B.7).
+
+| Rule | Decision | Notes |
 |---|---|---|
-| `factory_or_intersector_warning` | error | `Element Intersector .* NOT FOUND\|Object type .* was not created\|cannot be found in the factory` |
-| `qp_infeasible_in_log` | error | `QP infeasible` |
-| `broken_link_string` | warning | `Link update failed for .+ = @\|Could not read link from` *(corrected from v2's `'0+'` regex which was a pybind artifact)* |
-| `pybind_numpy_warning` | warning | `Could not read value for data field .* (np\|numpy)\.float\d+` |
-| `plugin_not_imported_warning` | warning | `This scene is using component defined in plugins but is not importing` *(only fires if `SceneChecking` plugin is loaded — subprocess wrapper should load it)* |
-| `auto_constraint_solver_warning` | warning | `A ConstraintSolver is required by .* but has not been found` *(class-invariant; current SOFA auto-creates `BlockGaussSeidelConstraintSolver`)* |
-| **WARN catch-all** | info | `^\[(WARNING\|ERROR\|FATAL)\]` for any line not matched above; surface raw line text |
+| `factory_or_intersector_warning` | cut | redundant with hard-failure path — these messages cause init failure or near-failure; agent gets `success: false` + traceback automatically |
+| `qp_infeasible_in_log` | **ship** | regex `QP infeasible` against full log before truncation. Anomaly carries `steps_fired: [...]` field for granularity (parallel to `solver_iter_cap_hit`). Severity error. The one §6.B rule clearly worth shipping: silent failure (scene continues with wrong actuation), can land in truncated middle. |
+| `broken_link_string` | cut | empirically verified — `LinearSolverConstraintCorrection` with broken link causes SIGSEGV (returncode=-11) before SOFA logs the message, so the regex doesn't match and the rule wouldn't fire. Other link-failure paths might log gracefully but were not verified worth pursuing. |
+| `pybind_numpy_warning` | cut | empirically verified — passing `np.float64`, `np.float32`, and 0-d `np.array` to Data fields (`totalMass`, `youngModulus`, `poissonRatio`) all succeed in current SOFA build with no warning emission. pybind11 numpy handling has improved upstream; rule targets a phenomenon that's been fixed. |
+| `plugin_not_imported_warning` | cut | redundant with **Health Rule 1** (`rule_1_plugins`) which catches the same condition structurally without requiring SceneChecking plugin to be loaded |
+| `auto_constraint_solver_warning` | cut | redundant with **Health Rule 2** (constraint+DefaultAnimationLoop mismatch) and **Rule 5A** (FreeMotion without constraint solver) — both already cover the scene-graph conditions that produce this warning |
+| WARN catch-all | cut | most generic "log re-extraction" rule possible — by the same principle that cut §6.A.10/.11/.12, the agent already has `solver_logs` (with truncation) and can read the warnings there |
+
+**Net §6.B rule set (1 surviving):** `qp_infeasible_in_log`.
 
 ### 3.3 §6.C — Pre-step structural smell tests (`diagnose_scene`-only)
 
+> **Status: §6.C reviewed 2026-04-29 — 1 ship, 0 cut.** Lives in `diagnose_scene`, not in the 9 SKILL.md health rules, because the upstream-corpus violator count is 0 (rare) — adding it to SKILL.md would bloat the always-loaded agent doc; surfacing only when investigating a misbehaving scene is the right home.
+
 Structural checks too niche for `summarize_scene` (where they'd just add noise for scene authors), but useful as anomalies when investigating a scene that's already misbehaving. Run after `summarize_scene`'s checks but before subprocess animate.
 
-| Rule | Severity | Trigger |
+| Rule | Decision | Notes |
 |---|---|---|
-| `multimapping_node_has_solver` | error | Node containing any registered `core::MultiMapping` subclass (`IdentityMultiMapping`, `SubsetMultiMapping`, `CenterOfMassMultiMapping`, `DistanceMultiMapping`; optional Cosserat: `DifferenceMultiMapping`) AND any `core::behavior::OdeSolver` subclass in the same node. **Forbidden = OdeSolver only** — linear solvers and constraint solvers in the output node are fine. **Allowed on output node:** `Mass`, any `ForceField`, `*ConstraintCorrection`, topology containers, visual models, collision models. *Mechanism:* `MechanicalIntegrationVisitor::fwdOdeSolver` returns `RESULT_PRUNE` after `solver->solve()`, so the ODE solver fires before the mapping's `apply`/`applyJ`/`applyJT`, detaching output DoFs from parent integration. STLIB `Rigidify()` explicitly removes solver before attaching `SubsetMultiMapping` — canonical confirmation. *Source:* `rule-12-multimapping-review.md`. |
+| `multimapping_node_has_solver` | **ship** | Trigger: node has any `core::MultiMapping` subclass (`IdentityMultiMapping`, `SubsetMultiMapping`, `CenterOfMassMultiMapping`, `DistanceMultiMapping`; optional `DifferenceMultiMapping` from Cosserat) AND any `core::behavior::OdeSolver` subclass in the same node. Severity error. **Forbidden = OdeSolver only** — linear solvers and constraint solvers in the output node are fine. **Allowed on output node:** `Mass`, any `ForceField`, `*ConstraintCorrection`, topology containers, visual models, collision models. Mechanism verified at four source locations: `MechanicalIntegrationVisitor.cpp:71` (`RESULT_PRUNE`), `BaseMechanicalVisitor.cpp:58-64` (iteration order — ODE solvers iterated first via `node->solver`), `Node.h:234` (`NodeSequence<OdeSolver>` typing — why the rule scopes to OdeSolver subclasses only), and STLIB `rigidification.py:119-126` (`Rigidify()` removes solver before `SubsetMultiMapping`, canonical confirmation). Full citations in `rule-12-multimapping-review.md`. |
 
 ### 3.4 Log truncation
 
@@ -430,7 +442,15 @@ Implement 5KB head + 25KB tail with `... <N lines elided> ...` separator. Apply 
 - End-to-end: `diagnose_scene` on a scene with a typo'd `RequiredPlugin` returns the `factory_or_intersector_warning` from §6.B.
 - End-to-end: `diagnose_scene` on a scene with a `*MultiMapping` output node containing an ODE solver returns the `multimapping_node_has_solver` §6.C anomaly.
 
-**LOC estimate:** ~370 lines + ~160 lines of test fixtures.
+**LOC estimate (revised after 2026-04-29 review):** ~150 lines + ~100 lines of test fixtures. Original estimate (~370 + ~160) was for the full 22-rule catalog; the 6-rule shipping set is much smaller. Surviving rules:
+
+- §6.A.3 `excessive_displacement` — two-tier (10× warn, 100× err) on `disp / extent` ratio
+- §6.A.6 `solver_iter_cap_hit` — Data-field path for NNCG/BlockGaussSeidel + regex path for CG/LCP (requires runner-side printLog activation)
+- §6.A.13 `inverse_objective_not_decreasing` — `d_objective` Data field, non-decreasing for ≥5 consecutive steps AND value > 1e-6
+- §6.B.2 `qp_infeasible_in_log` — regex `QP infeasible` against full log before truncation, with `steps_fired: [...]`
+- §6.C.1 `multimapping_node_has_solver` — structural check at init time
+
+Plus the runner-side printLog activation (deferred from Step 2) and log truncation (5KB head + 25KB tail). Step 3 also drops the §6.A `nan_first_step` rule from the catalog because it shipped in Step 2 metrics.
 
 ---
 

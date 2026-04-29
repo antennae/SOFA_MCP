@@ -75,6 +75,10 @@ Quick reference for picking alternatives when SKILL.md's recommended default doe
 | `MeshTopology` | generic; safe as volumetric only when loaded from `.msh`/`.vtk`/`.vtu` |
 | `RegularGridTopology` / `SparseGridTopology` | structured grid; must be 3D to count as volumetric |
 
+## FEM force fields — high Poisson ratio
+
+For near-incompressible materials (high Poisson ratio approaching 0.5 — biological tissue, gel, rubber, soft elastomers), `TetrahedronFEMForceField` (linear tet FEM) can suffer from volumetric locking: the simulation runs but the apparent stiffness comes out wrong, and the symptom is "deformation smaller than expected" without any error. Severity depends on mesh density and is usually mild for typical soft-robot silicones, becoming pronounced only as ν gets close to incompressible. If locking is suspected, switch to `TetrahedronHyperelasticityFEMForceField`. Hexahedral elements (`HexahedronFEMForceField`) lock less by construction.
+
 ## Mass
 
 | Class | Use case |
