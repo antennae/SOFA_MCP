@@ -113,7 +113,7 @@ Tri-leg variant with a target effector position. Solver converges in <200 steps.
 
 ## Files yet to create / modify
 
-For **6.1 Steps 3–5, Phases 3, 5, 6.2, 4** — see the spec at `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md` and the per-phase sections above.
+For **6.1 Steps 4–5, Phases 3, 5, 6.2, 4** — see the spec at `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md` and the per-phase sections above.
 
 ---
 

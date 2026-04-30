@@ -1,7 +1,7 @@
 # `diagnose_scene` v2.1 — Implementation plan
 
-**Date:** 2026-04-26 (v2.1.1 revision: same date; v2.1.2 restructure: same date — Step 1 narrowed to docs-only). 2026-04-29: Step 2 implementation plan drafted (this revision).
-**Status:** **Step 1 (docs) ✅ shipped 2026-04-26.** **Step 1.5 (`summarize_scene` rule enforcement) ✅ shipped 2026-04-26 with 1.5+ transport hardening shipped 2026-04-28.** See `docs/progress.md` for the completion log. Step 2 plan ready (see §Step 2 below) — implementation pending user approval. Steps 3-5 await individual review.
+**Date:** 2026-04-26 (v2.1.1 revision: same date; v2.1.2 restructure: same date — Step 1 narrowed to docs-only). 2026-04-29: Step 2 implementation plan drafted. 2026-04-30: Step 3 shipped (this revision).
+**Status:** **Steps 1 (docs), 1.5 (rule enforcement), 1.5+ (transport hardening), 2 (subprocess skeleton), 3 (smell test catalog) ✅ all shipped.** See `docs/progress.md` for the completion log. Steps 4-5 still pending review.
 **Supersedes:** v2 (`diagnose-scene-research/2026-04-25-diagnose-scene-design-v2.md`).
 **Research inputs** (full analysis, citations, corpus stats): `diagnose-scene-research/` — Agents 1–9 review reports + v2 review + smell-test generality review + 4-agent team validation (A: locking literature, B: structural rule corpus, C: QP source verification, D: regex source verification).
 
@@ -371,9 +371,9 @@ target_set = {name for name in plugin_cache | object_factory_names()
 
 ---
 
-# Step 3 — Smell test catalog (§6.A runtime + §6.B regex + §6.C structural) (NEEDS REVIEW)
+# Step 3 — Smell test catalog (§6.A runtime + §6.B regex + §6.C structural) ✅ (2026-04-30)
 
-> **Status: NEEDS USER REVIEW.** ~21 smell tests sourced from the multi-agent review; individual smell-test designs not walked through by you.
+> **Status: ✅ shipped 2026-04-30** in commits `d313d32` (runner extensions) and `8c83055` (parent smell tests + truncation). The 22-rule catalog was reviewed 2026-04-29 and pruned to **6 ship + 16 cut**, walked through rule-by-rule with the user. Implementation matches §3.1/§3.2/§3.3 below with three documented deviations recorded inline (CG/LCP regex deferred, `match_count` ships instead of `steps_fired`, signal-source clarification on §6.B.2).
 
 **Goal:** Implement the runtime-data and stdout-regex smell tests. These are the value-add layer on top of the Step 2 skeleton.
 
@@ -392,14 +392,14 @@ target_set = {name for name in plugin_cache | object_factory_names()
 | `excessive_displacement` | **ship two-tier** | ≥10× extent → warning, ≥100× extent → error. Compute extent from initial-position bbox; skip if extent == 0. Unit-agnostic (ratio). Replaces `nan_first_step` as primary numerical-blowup detector. |
 | `low_assembled_forces` | cut | same critique as `low_displacement` — zero force is correct for any scene without force sources |
 | `mo_static` | cut | duplicate of `low_displacement` from a stricter angle |
-| `solver_iter_cap_hit` | **ship** | one anomaly per (solver, run) with `steps_hit_cap: [...]` field. NNCG/BlockGaussSeidel via Data field read (no printLog needed); CG/LCP via printLog regex (requires runner-side printLog activation, also Step 3) |
+| `solver_iter_cap_hit` | **shipped (NNCG/BGS path only)** | One anomaly per (solver, run) with `steps_hit_cap: [...]` field. NNCG/BlockGaussSeidel Data-field path landed; **CG/LCP regex path explicitly deferred** — no verified log pattern in this build. Revisit once a known-cap-hit CG fixture is in hand. |
 | `visual_mechanical_diff` | cut | low actionability (no obvious fix), and natural mesh-resolution mismatch produces inherent error |
 | `mapped_dof_zero_accel` | cut | upstream bug (#5999) is fixed, class is rare, runner cost (capture mapped MOs) high vs. benefit |
 | `child_only_motion` | cut | bug class is hard to construct cleanly; FP class (rigid mappings with rotational parents — i.e., every robot scene this toolkit targets) is dominant |
 | `actuator_lambda_zero` | cut | re-extracts pattern already visible in `solver_logs` (which the agent receives); agent can spot `lambda = [0,0,0]` repeating |
 | `cable_negative_lambda` | cut | same as `actuator_lambda_zero` — log re-extraction |
 | `q_norm_blowup` | cut | same — regex on a log line the agent already sees |
-| `inverse_objective_not_decreasing` | **ship with epsilon guard** | reads `d_objective` Data field programmatically each step; trigger = "non-decreasing for ≥5 consecutive steps **AND** `d_objective > 1e-6`" — guard avoids at-optimum FP. Gated on QPInverseProblemSolver presence. |
+| `inverse_objective_not_decreasing` | **shipped with refined tolerance** | Reads the Python `objective` Data field (no `d_` prefix — the C++ `d_objective` is exposed to Python as `objective`) each step. Trigger refined during implementation: last 5 transitions all within `tol_abs = max(1e-9, 1e-6 * |obj[i]|)` (relative + absolute floor) AND `obj[-1] > 1e-6` (at-optimum guard). The relative+absolute tolerance is more robust than the spec's "value > 1e-6" guard alone — it eats numerical noise without unit-system sensitivity. Gated on QPInverseProblemSolver presence. |
 | `high_poisson_with_linear_tet` | cut + doc note | rule is more educational than diagnostic, and 0.45 threshold isn't well-grounded in literature for SOFA's tet formulation. Note added to `references/component-alternatives.md` ("FEM force fields — high Poisson ratio") describing the locking phenomenon without a specific threshold. |
 
 **Net §6.A rule set (4 surviving):** `nan_first_step` (Step 2), `excessive_displacement`, `solver_iter_cap_hit`, `inverse_objective_not_decreasing`.
@@ -413,7 +413,7 @@ target_set = {name for name in plugin_cache | object_factory_names()
 | Rule | Decision | Notes |
 |---|---|---|
 | `factory_or_intersector_warning` | cut | redundant with hard-failure path — these messages cause init failure or near-failure; agent gets `success: false` + traceback automatically |
-| `qp_infeasible_in_log` | **ship** | regex `QP infeasible` against full log before truncation. Anomaly carries `steps_fired: [...]` field for granularity (parallel to `solver_iter_cap_hit`). Severity error. The one §6.B rule clearly worth shipping: silent failure (scene continues with wrong actuation), can land in truncated middle. |
+| `qp_infeasible_in_log` | **shipped with `match_count` (per-step bucketing deferred)** | Regex `QP infeasible` against full log before truncation. Anomaly carries `match_count: int` instead of `steps_fired: [...]` — per-step bucketing was deferred because SOFA log delimiter parsing for step boundaries is fragile across versions, and the agent gets the same diagnostic value from "fired N times." **Signal source clarification (verified empirically 2026-04-30):** `QP infeasible` is emitted via `msg_warning`/`msg_error` from `QPInverseProblemImpl` (qpOASES rejection paths in `QPInverseProblemQPOases.cpp:96,106,116`), which **bypass the printLog gate**. The rule has signal even without runner-side printLog activation. Severity error. |
 | `broken_link_string` | cut | empirically verified — `LinearSolverConstraintCorrection` with broken link causes SIGSEGV (returncode=-11) before SOFA logs the message, so the regex doesn't match and the rule wouldn't fire. Other link-failure paths might log gracefully but were not verified worth pursuing. |
 | `pybind_numpy_warning` | cut | empirically verified — passing `np.float64`, `np.float32`, and 0-d `np.array` to Data fields (`totalMass`, `youngModulus`, `poissonRatio`) all succeed in current SOFA build with no warning emission. pybind11 numpy handling has improved upstream; rule targets a phenomenon that's been fixed. |
 | `plugin_not_imported_warning` | cut | redundant with **Health Rule 1** (`rule_1_plugins`) which catches the same condition structurally without requiring SceneChecking plugin to be loaded |
@@ -430,27 +430,33 @@ Structural checks too niche for `summarize_scene` (where they'd just add noise f
 
 | Rule | Decision | Notes |
 |---|---|---|
-| `multimapping_node_has_solver` | **ship** | Trigger: node has any `core::MultiMapping` subclass (`IdentityMultiMapping`, `SubsetMultiMapping`, `CenterOfMassMultiMapping`, `DistanceMultiMapping`; optional `DifferenceMultiMapping` from Cosserat) AND any `core::behavior::OdeSolver` subclass in the same node. Severity error. **Forbidden = OdeSolver only** — linear solvers and constraint solvers in the output node are fine. **Allowed on output node:** `Mass`, any `ForceField`, `*ConstraintCorrection`, topology containers, visual models, collision models. Mechanism verified at four source locations: `MechanicalIntegrationVisitor.cpp:71` (`RESULT_PRUNE`), `BaseMechanicalVisitor.cpp:58-64` (iteration order — ODE solvers iterated first via `node->solver`), `Node.h:234` (`NodeSequence<OdeSolver>` typing — why the rule scopes to OdeSolver subclasses only), and STLIB `rigidification.py:119-126` (`Rigidify()` removes solver before `SubsetMultiMapping`, canonical confirmation). Full citations in `rule-12-multimapping-review.md`. |
+| `multimapping_node_has_solver` | **shipped via plugin attribution** | Implementation uses **plugin attribution + class-name suffix**, not a hand-curated subclass enumeration: `_PLUGIN_FOR_CLASS.get(cls, "").startswith("Sofa.Component.Mapping.")` AND `cls.endswith("MultiMapping")` for the mapping side; `startswith("Sofa.Component.ODESolver.")` for the solver side. Both checks restricted to objects on the same node (strictly node-local). Per the project's principle-over-enumeration memory, this auto-covers every current and future SOFA `*MultiMapping` without maintenance. Mechanism verified at the same four source locations as the spec design (`MechanicalIntegrationVisitor.cpp:71`, `BaseMechanicalVisitor.cpp:58-64`, `Node.h:234`, STLIB `rigidification.py:119-126`). Severity error. |
 
 ### 3.4 Log truncation
 
-Implement 5KB head + 25KB tail with `... <N lines elided> ...` separator. Apply to combined stdout+stderr after smell tests have run on the full text.
+Shipped: 5KB head + 25KB tail with `\n... <N lines elided> ...\n` separator. The elided line count is computed from the dropped middle text. Truncation runs **after** smell tests scan the full pre-truncation log so the regex consumer (§6.B.2) doesn't miss matches that fall in the elided middle.
 
-**Verification:**
-- Each rule has a unit test feeding it a known-good and known-bad fixture scene/log, asserting expected anomaly emission.
-- End-to-end: `diagnose_scene` on a scene with deliberately wrong `BarycentricMapping` returns at least one §6.A anomaly.
-- End-to-end: `diagnose_scene` on a scene with a typo'd `RequiredPlugin` returns the `factory_or_intersector_warning` from §6.B.
-- End-to-end: `diagnose_scene` on a scene with a `*MultiMapping` output node containing an ODE solver returns the `multimapping_node_has_solver` §6.C anomaly.
+### 3.5 Implementation notes (post-ship)
 
-**LOC estimate (revised after 2026-04-29 review):** ~150 lines + ~100 lines of test fixtures. Original estimate (~370 + ~160) was for the full 22-rule catalog; the 6-rule shipping set is much smaller. Surviving rules:
+Recorded after the implementation diverged from the design in small, intentional ways:
+
+- **printLog activation predicate (runner-side, pre-init).** Two-tier: plugin-attribution primary (`Sofa.Component.{Constraint.Lagrangian.Solver, Constraint.Lagrangian.Correction, AnimationLoop, ODESolver.}*`) with class-name suffix fallback (`endswith("AnimationLoop")|"Solver"|"ConstraintCorrection")`) **only** when the class is absent from `_PLUGIN_FOR_CLASS`. Ensures `SparseLDLSolver` (linear, in-cache) is correctly excluded while `DefaultAnimationLoop` (core-builtin, not in cache) is correctly included. Each toggle wrapped in try/except — components without a `printLog` Data field don't abort the walk.
+
+- **Failure-path payload preservation.** The runner builds an in-place payload dict from `_empty_payload()` and populates it incrementally; `main`'s `except` writes whatever was filled. This means `structural_anomalies`, `printLog_activated`, and `plugin_cache_empty` survive a Python exception in init or animate. Segfaults still produce no payload — the parent detects this via "no payload file + non-zero returncode" and returns the `runner produced no payload` failure shape.
+
+- **Uniform response shape across early-failure paths.** `_empty_step3_fields()` ensures the new keys (`extents_per_mo`, `solver_iterations`, `solver_max_iterations`, `objective_series`, `printLog_activated`, `plugin_cache_empty`) are present even when the scene file is missing, summarize fails, the runner times out, or no payload is produced — callers can rely on the shape.
+
+- **No-false-positive smoke pass.** Re-ran `diagnose_scene` on `archiv/{cantilever_beam,tri_leg_cables,prostate,prostate_chamber}.py`: zero §6.A/§6.B/§6.C smell-test fires across all four. The Step 2 metrics on these scenes (`max_displacement` ratios <0.5×, no QP solver, no MultiMapping nodes) made this expected, but it was the empirical confirmation the plan's Verification §3 demanded.
+
+**LOC actuals:** ~340 lines impl + ~280 lines tests = ~620 total (vs. revised plan budget ~250). Test fixtures + the uniform-shape failure paths cost more than the budget accounted for; smell-test logic itself was lighter than expected. Net Step 3 surviving rules:
 
 - §6.A.3 `excessive_displacement` — two-tier (10× warn, 100× err) on `disp / extent` ratio
-- §6.A.6 `solver_iter_cap_hit` — Data-field path for NNCG/BlockGaussSeidel + regex path for CG/LCP (requires runner-side printLog activation)
-- §6.A.13 `inverse_objective_not_decreasing` — `d_objective` Data field, non-decreasing for ≥5 consecutive steps AND value > 1e-6
-- §6.B.2 `qp_infeasible_in_log` — regex `QP infeasible` against full log before truncation, with `steps_fired: [...]`
-- §6.C.1 `multimapping_node_has_solver` — structural check at init time
+- §6.A.6 `solver_iter_cap_hit` — Data-field path for NNCG/BlockGaussSeidel only (CG/LCP regex deferred)
+- §6.A.13 `inverse_objective_not_decreasing` — Python `objective` Data field, last 5 transitions within `tol_abs` AND `obj[-1] > 1e-6`
+- §6.B.2 `qp_infeasible_in_log` — regex `QP infeasible` with `match_count: int`
+- §6.C.1 `multimapping_node_has_solver` — plugin-attribution structural check at init time
 
-Plus the runner-side printLog activation (deferred from Step 2) and log truncation (5KB head + 25KB tail). Step 3 also drops the §6.A `nan_first_step` rule from the catalog because it shipped in Step 2 metrics.
+Plus runner-side printLog activation (deferred from Step 2) and log truncation (5KB head + 25KB tail). Step 3 dropped the §6.A `nan_first_step` rule from the catalog because it ships in Step 2 metrics; `excessive_displacement` is the primary numerical-blowup detector.
 
 ---
 

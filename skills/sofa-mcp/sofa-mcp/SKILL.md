@@ -35,7 +35,7 @@ When the user says "I want a SOFA scene that ...":
 
 When the user says "this scene runs but the behavior is wrong" (robot doesn't move, deformation too small, things pass through, position explodes), this is a **behavioral bug**, not an authoring bug. There's no traceback; the scene is physically wrong.
 
-The loop is: **symptom → structure check → run + measure → hypothesis → modify minimally → re-measure**. Don't recommend a fix without running the modified scene to falsify or confirm.
+The loop is: **symptom → sanity report → run + measure → hypothesis → modify minimally → re-measure**. Start with `diagnose_scene(scene_path, steps=N)` — it folds the 9 Health Rules and runtime smell tests (`excessive_displacement`, `solver_iter_cap_hit`, `inverse_objective_not_decreasing`, `qp_infeasible_in_log`, `multimapping_node_has_solver`) into one response with per-MO metrics and captured solver logs. Don't recommend a fix without running the modified scene to falsify or confirm.
 
 For the full investigative procedure, the symptom-to-hypothesis table, and a worked example, read `references/debugging-playbook.md`.
 
@@ -81,6 +81,7 @@ Full schemas are exposed via the MCP `tools/list` endpoint. Quick reference by c
 | Component lookup | `query_sofa_component`, `search_sofa_components`, `get_plugins_for_components` |
 | Mesh | `mesh_stats`, `find_indices_by_region`, `resolve_asset_path`, `generate_volume_mesh` |
 | Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `render_scene_snapshot` |
+| Diagnose | `diagnose_scene` (sanity report: Health Rules + runtime smell tests + per-MO metrics + truncated logs) |
 | Misc | `health_check` |
 
 For raw HTTP/curl debugging (rarely needed — agents use the MCP transport directly), see `references/curl-examples.md`.
