@@ -29,6 +29,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 | Phase | Status | Notes |
 |---|---|---|
 | 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3 done (see progress.md); Steps 4–5 pending |
+| 6.3 — Field-feedback punch list | ⏳ pending | 7 concrete items from MOR-trunk dogfooding session — see `docs/feedback_2026-04-30_mor_trunk_session.md` |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ pending | M3 gate |
 | 6.2 — Inverse-problem solver | ⏳ pending | M6 gate |
@@ -83,11 +84,29 @@ This is the second README demo — "give a target effector position, watch the r
 
 Rewrite around the demo. Hero: tri_leg_cables PNG + best `mcp_demo/*.webm` converted to GIF. Quick-start: Docker one-liner. One worked example: tri_leg_cables walkthrough. Tool table: 15 surviving + diagnose + inverse. Status: research/portfolio, no SLA.
 
+### Phase 6.3 — Field-feedback punch list
+
+Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full report at `docs/feedback_2026-04-30_mor_trunk_session.md`) surfaced 7 concrete fixes. None blocked the user's task; all were workaround-able. Listed in the user's priority order:
+
+| # | Item | Severity | Why it matters |
+|---|---|---|---|
+| 1 | **Rule 7 false positives** — `MeshTopology(src='@loader')` from `.vtk` flagged non-volumetric; `BarycentricMapping` parent check doesn't walk *up* to find topology (cable subnodes false-positive) | medium | agents will second-guess correct scenes; user without `validate_scene` reflex might rewrite a working scene |
+| 2 | **`write_scene` UTF-8 encoding** — fails on em-dashes in docstrings (same bug class as the Step 1.5+ encoding fix in `scene_writer.py:149,203`, but `write_scene` was missed) | medium | every multi-paragraph docstring an LLM agent writes hits this |
+| 3 | **`find_indices_by_region` VTK support** — returns "Could not extract vertices" on `.vtk` (a primary SOFA mesh format) | medium | coverage gap on a primary format; ROM workflows often need exact tip/fixed-end indices at script-author time |
+| 4 | **`diagnose_scene` verbose flag** — `solver_logs` returns ~2700 lines of `EulerImplicitSolver` f-vector dumps. Add a `verbose: false` mode that filters to plugin-load + solver-convergence + WARNING/ERROR + last-N-on-failure | medium | output is currently ~10× larger than it needs to be; eats context window in long sessions |
+| 5 | **`get_plugins_for_components` deprecated/meta handling** — `GenericConstraintSolver` returns "not found" instead of "deprecated, use NNCGConstraintSolver"; `RequiredPlugin` (meta) returns "not found" rather than being silently skipped | low | inconsistent with `validate_scene`'s clean migration message |
+| 6 | **SKILL.md: `claude mcp add` registration section** — agent had to figure out the `--scope user` vs project-scope footgun and the `/mcp` reconnect step on its own | low | onboarding gap for new users |
+| 7 | **`render_scene_snapshot` shows convex hull, not mesh geometry** — PyVista falls back to point-cloud→hull rendering because no topology is passed; cable-subnode point clouds get rolled in too | medium-high | the render tool exists for visual sanity ("did gravity pull the right way?"); a hull obscures exactly the deformation you want to see |
+
+**Strategic note:** the user assessed the MCP as "net positive — `validate_scene` and `diagnose_scene` together caught the deprecation + verified physics in two calls, work that would have been ~5 manual cycles otherwise." Friction is concentrated in (a) false-positive health rules and (b) verbose log volume. None of these blocked the task. Items #1, #2, and #7 have the highest "agent embarrassment" cost and are prime candidates to interleave ahead of Step 4.
+
 ---
 
 ## Suggested execution order
 
-**6.1 Step 4 (next)** → 6.1 Step 5 → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 4 (README rewrite, last so it can showcase everything that actually works).
+**6.1 Step 4 (default next)** → 6.1 Step 5 → 6.3 (field-feedback punch list) → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 4 (README rewrite, last so it can showcase everything that actually works).
+
+Alt order if user-facing polish matters more than completing the debug toolkit: lift the high-leverage 6.3 items (#1 rule-7 FPs, #2 write_scene UTF-8, #7 render geometry) ahead of Step 4 — these directly affect agent embarrassment in real authoring sessions, while Step 4's probe library is mostly load-bearing for the M5 gate.
 
 If energy is constrained: ship Phases 1–5 as v0.1 (portfolio-ready), sit on it, decide whether Phase 6.2 is worth the investment based on whether anyone actually finds and uses v0.1.
 
@@ -136,9 +155,10 @@ End-state check that proves the whole plan worked:
 ## Effort estimate (remaining work)
 
 - Phase 6.1 Steps 4-5: ~half a day
+- Phase 6.3 (field-feedback punch list): ~half a day for items #1/#2/#3/#5 (rule fixes + encoding + VTK reader + cache cleanup), plus ~half a day each for #4 (verbose flag) and #7 (render geometry) if those land. So ~half a day minimum, ~1.5 days for the full punch list.
 - Phase 3: ~half a day
 - Phase 6.2: ~1 day
 - Phase 5: ~half a day
 - Phase 4: ~1 day
 
-**Remaining: ~3-4 days sequentially.** Less if phases parallelize. End state reads as a *capable* tool, not just a polished one. Phases 1-5 ship as v0.1 (portfolio-ready); 6.2 lands as v0.2 (the substantive features that earn the deeper claim).
+**Remaining: ~4-5 days sequentially** (was ~3-4 before 6.3 landed). Less if phases parallelize. End state reads as a *capable* tool, not just a polished one. Phases 1-5 ship as v0.1 (portfolio-ready); 6.2 lands as v0.2 (the substantive features that earn the deeper claim).

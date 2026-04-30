@@ -1,8 +1,8 @@
 # SOFA_MCP — Completed Work Log
 
-*Last updated 2026-04-30 (Step 3 shipped)*
+*Last updated 2026-04-30 (Step 3 shipped + MOR-trunk dogfooding feedback)*
 
-This file is the historical record of work that has shipped. The forward-looking roadmap lives in `docs/plan.md`; the technical specification for the `diagnose_scene` toolkit lives in `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md`.
+This file is the historical record of work that has shipped. The forward-looking roadmap lives in `docs/plan.md`; the technical specification for the `diagnose_scene` toolkit lives in `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md`. Real-world dogfooding feedback lives in `docs/feedback_*.md` files.
 
 ---
 
@@ -144,3 +144,9 @@ Six rules ship + printLog activation + log truncation, per the plan-mode design 
 
 - **M1 — Headline workflow renders correctly** ✅ (after Phase 1)
 - **M2 — Deletion approval** ✅ (before Phase 2)
+
+---
+
+## Real-world dogfooding events
+
+- **2026-04-30 — MOR-trunk authoring session.** Used the MCP from a separate Claude Code session in `~/workspace/sofa` to author a 4-cable soft-trunk scene for kPCA Model Order Reduction work (final output `~/workspace/MOR/scene/trunk/trunk.py`, 100 steps, 113mm tip displacement, no NaN). Net assessment: **net positive** — `validate_scene` and `diagnose_scene` together caught a `GenericConstraintSolver` v25.12 deprecation + verified physics in two calls, work the user estimated at ~5 manual cycles otherwise. Surfaced 7 concrete bugs / friction points (3 real bugs, 2 false-positive Rule 7 paths, 3 ergonomic gaps) — full report at `docs/feedback_2026-04-30_mor_trunk_session.md`, prioritized punch list folded into `docs/plan.md` Phase 6.3.
