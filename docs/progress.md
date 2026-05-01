@@ -193,3 +193,50 @@ future work if a real scene hits it.
 ## Real-world dogfooding events
 
 - **2026-04-30 — MOR-trunk authoring session.** Used the MCP from a separate Claude Code session in `~/workspace/sofa` to author a 4-cable soft-trunk scene for kPCA Model Order Reduction work (final output `~/workspace/MOR/scene/trunk/trunk.py`, 100 steps, 113mm tip displacement, no NaN). Net assessment: **net positive** — `validate_scene` and `diagnose_scene` together caught a `GenericConstraintSolver` v25.12 deprecation + verified physics in two calls, work the user estimated at ~5 manual cycles otherwise. Surfaced 7 concrete bugs / friction points (3 real bugs, 2 false-positive Rule 7 paths, 3 ergonomic gaps) — full report at `docs/feedback_2026-04-30_mor_trunk_session.md`, prioritized punch list folded into `docs/plan.md` Phase 6.3.
+
+---
+
+## Phase 6.1 Step 4 — Probe library (high-leverage pair) ✅ (2026-05-02)
+
+Two new MCP probes that close the "instrument or modify" rows of the
+debugging playbook:
+
+- **`enable_logs_and_run`** (`10bda27` + `5d67ab9`) — toggle
+  `printLog=True` on objects matching user-supplied `log_targets`
+  (class names or node-path fragments), animate for N steps, return
+  captured stdout filtered through `compact_log`. The agent uses this
+  to see what a specific solver, mapping, or constraint says at
+  runtime after `diagnose_scene` flags an anomaly.
+- **`perturb_and_run`** (`098c96a` + `09a8b00`) — apply Data-field
+  overrides specified as `{"/path": {"field": value}}` before init,
+  animate for N steps, return per-MO metrics in the same shape as
+  `diagnose_scene`. Foundational to "modify minimally, re-measure,
+  falsify" hypothesis testing. Path can be an object path (single
+  object) or a node path (fans out across the node).
+
+Both probes share a runner (`sofa_mcp/observer/_probe_runner.py`) that
+dispatches by `--mode` argv. Parent orchestrator at
+`sofa_mcp/observer/probes.py` mirrors `diagnostics.py` (tempfile
+lifecycle, JSON-based subprocess invocation, `compact_log` integration).
+
+**Plan-code bugs caught during implementation:**
+- `_resolve_node_at_path` needed longest-prefix match (first-match
+  produced wrong residuals).
+- SOFA scalar Data fields are 1-element numpy arrays, not Python
+  scalars; assigning a bare `100.0` raises TypeError. Wrap in
+  `[value]` on TypeError.
+- `numpy_array or []` raises ambiguous truth-value; use explicit
+  `if raw is not None` checks.
+- `_capture_metrics` takes `root` directly rather than reaching
+  through `mos[0][1].getContext()`.
+
+**Scope cut from spec v2.1 (user-confirmed 2026-05-02):**
+`compare_scenes` (~200 LOC) and `scan_init_stdout` (~50 LOC) are
+deferred. The four M5 fixtures don't strictly need them; if Step 5
+surfaces a case where they're required, they get their own plan.
+
+**Tests:** 5 integration tests in `test/test_observer/test_probes.py`
+covering class-name targets, unmatched targets, default log
+compaction, youngModulus perturbation effect on
+`archiv/cantilever_beam.py`'s `HexahedronFEMForceField` (path
+`/root/beam/FEM`), and unmatched-path reporting.

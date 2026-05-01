@@ -81,10 +81,10 @@ These are starting points, not rules. The data may not match any cleanly, in whi
 
 Pick one hypothesis. Modify the scene **minimally** to test it:
 
-- **Suspect a stiffness issue?** Halve `youngModulus`, re-run, see if displacement scales as expected.
-- **Suspect actuator wiring?** Increase the actuator value 10×, re-run. If displacement also scales 10×, the wiring is fine and the issue is upstream. If displacement stays near zero, the actuator isn't reaching the DOFs you think it is.
-- **Suspect units mismatch?** Multiply gravity by 1000 or divide YM by 1000 to see which scales the result toward expected.
-- **Suspect a mapping?** Add `printLog=True` on the mapping and the topology container to see what they bind to at init time, then re-`validate_scene` and read the captured stderr.
+- **Suspect a stiffness issue?** `perturb_and_run(scene, {"/path/to/ff": {"youngModulus": old/2}}, steps=N)`. If displacement scales as expected, the hypothesis is confirmed.
+- **Suspect actuator wiring?** `perturb_and_run(scene, {"/path/to/cable": {"value": old*10}}, steps=N)`. If displacement also scales 10×, wiring is fine and the issue is upstream.
+- **Suspect units mismatch?** `perturb_and_run(scene, {"/path/to/ff": {"youngModulus": old/1000}}, steps=N)` (or multiply gravity). See which scales the result toward expected.
+- **Suspect a mapping?** `enable_logs_and_run(scene, log_targets=["BarycentricMapping"], steps=5)` to see what the mapping binds to at init time.
 
 Use `patch_scene` to apply the minimal change, then `run_and_extract` again. Compare to the previous trajectory. The change in behavior **falsifies or confirms** the hypothesis far more reliably than reading the source.
 

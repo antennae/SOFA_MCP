@@ -28,7 +28,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 
 | Phase | Status | Notes |
 |---|---|---|
-| 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3 done (see progress.md); Steps 4–5 pending |
+| 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3, 4 (high-leverage pair) done (see progress.md); Step 5 (M5 gate) pending |
 | 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5 shipped (2026-04-30 / 2026-05-02); 4 of 8 still pending |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ pending | M3 gate |
@@ -49,9 +49,9 @@ Shipped — see `docs/progress.md` Step 2 entry. `diagnose_scene` MCP tool exist
 
 Shipped — see `docs/progress.md` Step 3 entry. 6 rules + printLog activation + log truncation, all green in `pytest test/test_observer/test_diagnostics.py` (25 tests) and `test/test_architect/test_mcp_transport.py` (3 tests). Zero false positives on the four `archiv/` scenes. CG/LCP regex arm of `solver_iter_cap_hit` and per-step bucketing for `qp_infeasible_in_log` deferred to a future iteration when known-cap-hit fixtures and step-boundary-stable log formats are available.
 
-### Step 4 — Probe library (4 probes) ⏳ (NEEDS REVIEW)
+### Step 4 — Probe library ✅ partial (2026-05-02)
 
-Targeted instrumentation — force/energy access, time-series sanity, mapping consistency, constraint convergence. Each probe is a focused helper the agent can call from the playbook. Full spec §Step 4.
+High-leverage pair shipped: `enable_logs_and_run` + `perturb_and_run` (see progress.md). The two deferred probes — `compare_scenes` (~200 LOC, two-scene runtime diff) and `scan_init_stdout` (~50 LOC, init-only precheck) — are out of scope for now and get their own follow-up plan if M5 surfaces a need.
 
 ### Step 5 — Playbook integration + tests + M5 gate ⏳ (NEEDS REVIEW)
 

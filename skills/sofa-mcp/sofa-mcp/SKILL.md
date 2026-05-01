@@ -82,6 +82,7 @@ Full schemas are exposed via the MCP `tools/list` endpoint. Quick reference by c
 | Mesh | `mesh_stats`, `find_indices_by_region`, `resolve_asset_path`, `generate_volume_mesh` |
 | Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `render_scene_snapshot` |
 | Diagnose | `diagnose_scene` (sanity report: Health Rules + runtime smell tests + per-MO metrics + truncated logs) |
+| Probes | `enable_logs_and_run` (toggle printLog on targets, animate, capture filtered logs), `perturb_and_run` (apply Data-field overrides before init, animate, return per-MO metrics) |
 | Misc | `health_check` |
 
 For raw HTTP/curl debugging (rarely needed — agents use the MCP transport directly), see `references/curl-examples.md`.
@@ -91,6 +92,10 @@ For raw HTTP/curl debugging (rarely needed — agents use the MCP transport dire
 `diagnose_scene`, `validate_scene`, and `summarize_scene` accept `verbose: bool = False`. By default they compact captured SOFA stdout/stderr to plugin loads, convergence summaries, errors/warnings, and tracebacks — the f-vector dumps from `EulerImplicitSolver`'s `printLog` are dropped. The response carries `log_lines_dropped: int` when the filter removed lines.
 
 Flip `verbose=True` only when you suspect the filter dropped a useful line: e.g. an unfamiliar `[INFO]` channel, an obscure deprecation message, or when the agent needs to debug the filter itself. Smell-test detection (`qp_infeasible_in_log` etc.) always runs against the full pre-compaction log, so `verbose=False` does not hide detected anomalies — it only hides the raw text those anomalies were derived from.
+
+### Probe tools (Step 4)
+
+`enable_logs_and_run` and `perturb_and_run` are follow-up instruments after `diagnose_scene` flags an anomaly. Use `enable_logs_and_run` when you want to see what a specific solver, mapping, or constraint says at runtime (the targets argument matches by class name like `"EulerImplicitSolver"` or by node-path fragment like `"/leg_0/odesolver"`). Use `perturb_and_run` to test a hypothesis by modifying one Data field and re-measuring — e.g. halve `youngModulus`, see if displacement doubles.
 
 ## Conventions
 
