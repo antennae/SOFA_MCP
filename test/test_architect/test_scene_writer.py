@@ -64,6 +64,26 @@ def add_scene_content(rootNode):
         if os.path.exists(output_file):
             os.remove(output_file)
 
+    def test_write_scene_handles_utf8_in_docstring(self):
+        # Em-dash (U+2014) and other unicode in a docstring used to crash
+        # write_scene with 'ascii' codec can't encode... — see docs/feedback_2026-04-30.
+        script = '''
+def createScene(rootNode):
+    """Soft trunk scene — uses cable actuators."""
+    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
+    rootNode.addObject("MechanicalObject", position=[0, 0, 0])
+'''
+        output_file = "utf8_scene.py"
+        try:
+            result = write_scene(script, output_file)
+            self.assertTrue(result["success"], f"Failed with: {result.get('error')}")
+            with open(output_file, "r", encoding="utf-8") as f:
+                contents = f.read()
+            self.assertIn("Soft trunk scene — uses cable actuators.", contents)
+        finally:
+            if os.path.exists(output_file):
+                os.remove(output_file)
+
     def test_load_scene_reads_file(self):
         script = """
 def add_scene_content(rootNode):

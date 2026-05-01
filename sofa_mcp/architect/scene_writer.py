@@ -315,7 +315,7 @@ def write_scene(script_content: str, output_filename: str) -> Dict[str, Any]:
     output_path = pathlib.Path(output_filename).absolute()
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
-    with open(output_path, "w") as f:
+    with open(output_path, "w", encoding="utf-8") as f:
         f.write(create_scene_function)
 
     return {
