@@ -34,8 +34,8 @@ def test_enable_logs_and_run_activates_targets_by_class_name():
 
     assert result["success"] is True, f"probe failed: {result}"
     assert result["log_targets_activated"], "expected at least one solver to be activated"
-    # Activated paths are full node-paths to the matched objects.
-    assert any("EulerImplicitSolver" in p or "/" in p for p in result["log_targets_activated"])
+    # Activated paths are full node-paths to the matched objects; verify target was found.
+    assert "EulerImplicitSolver" not in result.get("log_targets_not_found", [])
     # The captured logs must be non-empty (printLog produced output).
     assert result["logs"], "expected non-empty logs after printLog activation"
 
@@ -64,4 +64,6 @@ def test_enable_logs_and_run_compacts_logs_by_default():
     )
     assert result["success"] is True
     # printLog generates lots of lines; expect non-trivial drop count
-    assert result.get("log_lines_dropped", 0) >= 0
+    assert result.get("log_lines_dropped", 0) > 0, (
+        "expected compact_log to filter at least one line of printLog output"
+    )
