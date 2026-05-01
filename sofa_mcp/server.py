@@ -211,6 +211,27 @@ def enable_logs_and_run(
     )
 
 
+@mcp.tool()
+def perturb_and_run(
+    scene_path: str,
+    parameter_changes: dict,
+    steps: int = 50,
+    dt: float = 0.01,
+    verbose: bool = False,
+) -> dict:
+    """Apply Data-field overrides (e.g. `{"/root/leg/ff": {"youngModulus": 1000}}`) before init, animate, return per-MO metrics. Use to test a hypothesis: "is the deformation small because the material is too stiff?" → halve youngModulus, re-run, see if displacement scales as expected.
+
+    Logs are compacted by default; pass `verbose=True` for the full stream.
+    """
+    return probes.perturb_and_run(
+        scene_path=scene_path,
+        parameter_changes=parameter_changes,
+        steps=steps,
+        dt=dt,
+        verbose=verbose,
+    )
+
+
 if __name__ == "__main__":
     from sofa_mcp.architect.plugin_cache import generate_and_save_plugin_map
     generate_and_save_plugin_map()

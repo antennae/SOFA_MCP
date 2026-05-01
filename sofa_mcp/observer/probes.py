@@ -147,4 +147,63 @@ def enable_logs_and_run(
     return response
 
 
-# perturb_and_run added in Task 2.
+def perturb_and_run(
+    scene_path: str,
+    parameter_changes: Dict[str, Dict[str, Any]],
+    steps: int = 50,
+    dt: float = 0.01,
+    verbose: bool = False,
+    timeout_s: int = _DEFAULT_TIMEOUT_S,
+) -> Dict[str, Any]:
+    """Apply Data-field overrides specified by `parameter_changes`
+    (`{"/path": {"field": value, ...}, ...}`) before init, animate for
+    `steps` steps, return per-MO metrics.
+
+    Returns:
+        {success, parameter_changes_applied, parameter_changes_failed,
+         metrics: {nan_first_step, max_displacement_per_mo,
+                   max_force_per_mo}, logs, log_lines_dropped?, error?}
+    """
+    path = pathlib.Path(scene_path).expanduser()
+    if not path.exists() or not path.is_file():
+        return {
+            "success": False,
+            "error": f"Scene file not found: {scene_path}",
+            "parameter_changes_applied": [],
+            "parameter_changes_failed": [],
+            "metrics": {"nan_first_step": None, "max_displacement_per_mo": {}, "max_force_per_mo": {}},
+            "logs": "",
+        }
+
+    spec = {
+        "parameter_changes": dict(parameter_changes or {}),
+        "steps": int(steps),
+        "dt": float(dt),
+    }
+    payload = _run_subprocess("perturb", str(path), spec, timeout_s)
+
+    logs_raw = payload.pop("_logs_raw", "") or ""
+    if verbose:
+        logs = logs_raw
+        dropped = 0
+    else:
+        logs, dropped = compact_log(logs_raw)
+
+    response: Dict[str, Any] = {
+        "success": bool(payload.get("success")),
+        "parameter_changes_applied": payload.get("parameter_changes_applied") or [],
+        "parameter_changes_failed": payload.get("parameter_changes_failed") or [],
+        "metrics": payload.get("metrics") or {
+            "nan_first_step": None,
+            "max_displacement_per_mo": {},
+            "max_force_per_mo": {},
+        },
+        "logs": logs,
+    }
+    if dropped:
+        response["log_lines_dropped"] = dropped
+    if payload.get("error"):
+        response["error"] = payload["error"]
+    if payload.get("traceback"):
+        response["traceback"] = payload["traceback"]
+    return response

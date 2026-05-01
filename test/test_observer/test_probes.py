@@ -67,3 +67,54 @@ def test_enable_logs_and_run_compacts_logs_by_default():
     assert result.get("log_lines_dropped", 0) > 0, (
         "expected compact_log to filter at least one line of printLog output"
     )
+
+
+def test_perturb_and_run_applies_youngmodulus_override():
+    """Perturb the youngModulus on the cantilever beam's force field; the
+    perturbation should be reported as applied AND change the resulting
+    displacement (softer beam → larger displacement)."""
+    scene_path = os.path.join(PROJECT_ROOT, "archiv", "cantilever_beam.py")
+    assert os.path.exists(scene_path)
+
+    # Baseline run with diagnose_scene-equivalent (no perturbation).
+    baseline = probes.perturb_and_run(
+        scene_path=scene_path,
+        parameter_changes={},
+        steps=20,
+        dt=0.01,
+    )
+    assert baseline["success"] is True
+    baseline_disp = max(baseline["metrics"]["max_displacement_per_mo"].values(), default=0.0)
+
+    # Soften the beam — path is /root/beam/FEM (HexahedronFEMForceField named 'FEM').
+    softer = probes.perturb_and_run(
+        scene_path=scene_path,
+        parameter_changes={"/root/beam/FEM": {"youngModulus": 100.0}},
+        steps=20,
+        dt=0.01,
+    )
+    assert softer["success"] is True, f"perturb failed: {softer}"
+    assert softer["parameter_changes_applied"], "expected at least one change to apply"
+
+    softer_disp = max(softer["metrics"]["max_displacement_per_mo"].values(), default=0.0)
+    # A softer beam under gravity should deflect more.
+    assert softer_disp > baseline_disp, (
+        f"expected softer beam to deflect more; baseline={baseline_disp}, softer={softer_disp}"
+    )
+
+
+def test_perturb_and_run_reports_unmatched_paths():
+    """If a path doesn't match any object, parameter_changes_failed records it
+    so the agent self-corrects."""
+    scene_path = os.path.join(PROJECT_ROOT, "archiv", "cantilever_beam.py")
+    result = probes.perturb_and_run(
+        scene_path=scene_path,
+        parameter_changes={"/root/does_not_exist": {"youngModulus": 100.0}},
+        steps=2,
+        dt=0.01,
+    )
+    assert result["success"] is True
+    failed = result.get("parameter_changes_failed") or []
+    assert any(f.get("path") == "/root/does_not_exist" for f in failed), (
+        f"expected /root/does_not_exist in failures; got {failed}"
+    )
