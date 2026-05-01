@@ -24,10 +24,12 @@ collapse to the same failure shape — runner crashed before producing payload.
 import json
 import os
 import pathlib
-import re
 import subprocess
 import tempfile
 from typing import Any, Dict, List
+
+from sofa_mcp._log_compact import QP_INFEASIBLE_RE as _QP_INFEASIBLE_RE
+from sofa_mcp._log_compact import compact_log
 
 
 PYTHON = os.path.expanduser("~/venv/bin/python")
@@ -46,7 +48,6 @@ _EXCESSIVE_DISP_ERROR_RATIO = 100.0
 # pre-truncation log; truncation happens last in the orchestrator.
 _LOG_HEAD_CHARS = 5 * 1024
 _LOG_TAIL_CHARS = 25 * 1024
-_QP_INFEASIBLE_RE = re.compile(r"QP infeasible")
 
 
 def _empty_metrics() -> Dict[str, Any]:
@@ -258,6 +259,7 @@ def diagnose_scene(
     complaint: str = None,
     steps: int = 50,
     dt: float = 0.01,
+    verbose: bool = False,
 ) -> Dict[str, Any]:
     """Run the diagnose-scene sanity report on a scene file.
 
@@ -267,11 +269,26 @@ def diagnose_scene(
             playbook will use it to bias which probe runs next).
         steps: Number of animation steps to run.
         dt: Time step.
+        verbose: When False (default), `solver_logs` is filtered through
+            the shared allowlist + tail-anchor compaction; the response
+            also carries `log_lines_dropped: int` when filter drops occur.
+            When True, `solver_logs` returns the full captured stream
+            (subject to head/tail char-budget truncation as before).
+            Smell tests always run against the full pre-compaction log.
 
     Returns:
         Sanity report dict — see the Step 2 contract in docs/plan.md.
     """
     del complaint  # accepted for forward-compat; unused in Step 2.
+
+    def _finalize_logs(text: str) -> tuple[str, int]:
+        """Compact (if verbose=False) then head/tail-truncate. Returns
+        (final_text, dropped). Order matters: smell tests already ran on
+        the full pre-compaction text in the caller."""
+        if verbose:
+            return _truncate_log(text), 0
+        compacted, dropped = compact_log(text or "")
+        return _truncate_log(compacted), dropped
 
     path = pathlib.Path(scene_path).expanduser()
     if not path.exists() or not path.is_file():
@@ -326,17 +343,21 @@ def diagnose_scene(
                 captured += exc.stdout if isinstance(exc.stdout, str) else exc.stdout.decode("utf-8", errors="replace")
             if exc.stderr:
                 captured += exc.stderr if isinstance(exc.stderr, str) else exc.stderr.decode("utf-8", errors="replace")
-            return {
+            final_logs, dropped = _finalize_logs(captured)
+            response: Dict[str, Any] = {
                 "success": False,
                 "error": "Timeout",
                 "message": f"diagnose_scene runner exceeded {RUNNER_TIMEOUT_S}s.",
                 "anomalies": anomalies,
                 "metrics": _empty_metrics(),
                 "init_stdout_findings": [],
-                "solver_logs": _truncate_log(captured),
+                "solver_logs": final_logs,
                 "scene_summary": _empty_scene_summary(),
                 **_empty_step3_fields(),
             }
+            if dropped:
+                response["log_lines_dropped"] = dropped
+            return response
 
         solver_logs = (result.stdout or "") + (result.stderr or "")
 
@@ -353,17 +374,21 @@ def diagnose_scene(
             read_err = str(exc)
 
         if payload is None:
-            return {
+            final_logs, dropped = _finalize_logs(solver_logs)
+            response: Dict[str, Any] = {
                 "success": False,
                 "error": f"runner produced no payload (returncode={result.returncode}{f'; read_err={read_err}' if read_err else ''})",
                 "message": "diagnose_scene runner did not write a JSON payload.",
                 "anomalies": anomalies + _check_qp_infeasible_in_log(solver_logs),
                 "metrics": _empty_metrics(),
                 "init_stdout_findings": [],
-                "solver_logs": _truncate_log(solver_logs),
+                "solver_logs": final_logs,
                 "scene_summary": _empty_scene_summary(),
                 **_empty_step3_fields(),
             }
+            if dropped:
+                response["log_lines_dropped"] = dropped
+            return response
 
         # Step 3 smell tests — runner-supplied state plus the full
         # pre-truncation log. Run regardless of payload.success so that
@@ -383,10 +408,11 @@ def diagnose_scene(
         ))
         smell_anomalies.extend(_check_qp_infeasible_in_log(solver_logs))
 
-        truncated_logs = _truncate_log(solver_logs)
+        # Compact + truncate after smell tests have scanned the full text.
+        final_logs, dropped = _finalize_logs(solver_logs)
 
         if not payload.get("success"):
-            return {
+            response = {
                 "success": False,
                 "error": payload.get("error") or "runner reported failure",
                 "message": "diagnose_scene runner reported a failure during init or animate.",
@@ -394,7 +420,7 @@ def diagnose_scene(
                 "anomalies": anomalies + smell_anomalies,
                 "metrics": runner_metrics,
                 "init_stdout_findings": payload.get("init_stdout_findings") or [],
-                "solver_logs": truncated_logs,
+                "solver_logs": final_logs,
                 "scene_summary": payload.get("scene_summary") or _empty_scene_summary(),
                 "extents_per_mo": payload.get("extents_per_mo") or {},
                 "solver_iterations": payload.get("solver_iterations") or {},
@@ -403,13 +429,16 @@ def diagnose_scene(
                 "printLog_activated": payload.get("printLog_activated") or [],
                 "plugin_cache_empty": payload.get("plugin_cache_empty", False),
             }
+            if dropped:
+                response["log_lines_dropped"] = dropped
+            return response
 
         merged = {
             "success": True,
             "metrics": runner_metrics,
             "anomalies": anomalies + smell_anomalies,
             "init_stdout_findings": payload.get("init_stdout_findings") or [],
-            "solver_logs": truncated_logs,
+            "solver_logs": final_logs,
             "scene_summary": payload.get("scene_summary") or _empty_scene_summary(),
             "extents_per_mo": payload.get("extents_per_mo") or {},
             "solver_iterations": payload.get("solver_iterations") or {},
@@ -418,6 +447,8 @@ def diagnose_scene(
             "printLog_activated": payload.get("printLog_activated") or [],
             "plugin_cache_empty": payload.get("plugin_cache_empty", False),
         }
+        if dropped:
+            merged["log_lines_dropped"] = dropped
         if "summarize_error" in summary_part:
             merged["summarize_error"] = summary_part["summarize_error"]
         return merged

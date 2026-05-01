@@ -225,6 +225,32 @@ def test_diagnose_scene_round_trip_over_mcp(mcp_server_url, tmp_path):
     assert not fired, f"clean scene fired smell-test slugs over MCP: {fired}"
 
 
+def test_diagnose_scene_verbose_flag_compacts_over_mcp(mcp_server_url):
+    """The verbose flag survives the JSON-RPC transport. Default (False)
+    yields compacted logs with `log_lines_dropped`; explicit True returns
+    the full captured log unchanged."""
+    scene_path = os.path.join(PROJECT_ROOT, "archiv", "cantilever_beam.py")
+    assert os.path.exists(scene_path)
+
+    compact = _call_tool(
+        mcp_server_url,
+        "diagnose_scene",
+        {"scene_path": scene_path, "steps": 5, "dt": 0.01},
+    )
+    full = _call_tool(
+        mcp_server_url,
+        "diagnose_scene",
+        {"scene_path": scene_path, "steps": 5, "dt": 0.01, "verbose": True},
+    )
+
+    assert compact.get("success") is True
+    assert full.get("success") is True
+
+    assert compact.get("log_lines_dropped", 0) > 0
+    assert "log_lines_dropped" not in full or full.get("log_lines_dropped", 0) == 0
+    assert len(compact["solver_logs"]) < len(full["solver_logs"])
+
+
 def test_diagnose_scene_smell_test_lifts_over_mcp(mcp_server_url):
     """A scene that triggers §6.C surfaces the slug through the JSON-RPC
     transport. Multimapping is the cheapest known-bad fixture (structural,

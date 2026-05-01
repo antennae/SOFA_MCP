@@ -10,6 +10,22 @@ _SUMMARY_RUNTIME_TEMPLATE_PATH = os.path.join(
     "_summary_runtime_template.py",
 )
 
+_VALIDATION_SUCCESS_SENTINEL = "SUCCESS: Scene initialized and animated 1 step."
+
+
+def _strip_success_sentinel(stdout: str) -> str:
+    """Drop the validation-wrapper SUCCESS line from stdout before exposing
+    it to the caller. Mirrors `summarize_scene`'s SCENE_SUMMARY_JSON pattern:
+    the wrapper's success signal is the subprocess returncode, not a string
+    in stdout, so the sentinel adds noise to the public field."""
+    if not stdout or _VALIDATION_SUCCESS_SENTINEL not in stdout:
+        return stdout
+    kept = [line for line in stdout.splitlines() if _VALIDATION_SUCCESS_SENTINEL not in line]
+    out = "\n".join(kept)
+    if stdout.endswith("\n") and not out.endswith("\n"):
+        out += "\n"
+    return out
+
 
 def _build_scene_source(script_content: str) -> str:
     """The user-provided script is now expected to be the full content,
@@ -135,12 +151,19 @@ def _build_summary_wrapper(create_scene_function: str) -> str:
     return out
 
 
-def validate_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, Any]:
+def validate_scene(
+    script_content: str, *, timeout_s: int = 30, verbose: bool = False
+) -> Dict[str, Any]:
     """Validates a user-provided scene snippet by initializing and animating one step.
 
-    The user-provided `script_content` must define `add_scene_content(parent_node)`.
+    The user-provided `script_content` must define `createScene(rootNode)`.
     Returns a dict with `success` plus stdout/stderr-derived error info.
+
+    `verbose=False` (default) compacts the captured SOFA stdout/stderr
+    via the shared allowlist + tail-anchor filter. `verbose=True` returns
+    the full captured streams unchanged.
     """
+    from sofa_mcp._log_compact import compact_log
 
     python_path = os.path.expanduser("~/venv/bin/python")
     create_scene_function = _build_scene_source(script_content)
@@ -159,18 +182,36 @@ def validate_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, Any
         )
 
         if result.returncode == 0:
-            return {
+            stdout = _strip_success_sentinel(result.stdout or "")
+            response: Dict[str, Any] = {
                 "success": True,
                 "message": "Scene validated.",
-                "stdout": result.stdout,
+                "stdout": stdout,
             }
+            if not verbose:
+                compacted, dropped = compact_log(stdout)
+                response["stdout"] = compacted
+                if dropped:
+                    response["log_lines_dropped"] = dropped
+            return response
 
-        return {
+        error_field = result.stderr or result.stdout or ""
+        stdout_field = result.stdout or ""
+        response = {
             "success": False,
             "message": "Validation failed. Please correct the script based on the error.",
-            "error": result.stderr or result.stdout,
-            "stdout": result.stdout,
+            "error": error_field,
+            "stdout": stdout_field,
         }
+        if not verbose:
+            error_compacted, error_dropped = compact_log(error_field)
+            stdout_compacted, stdout_dropped = compact_log(stdout_field)
+            response["error"] = error_compacted
+            response["stdout"] = stdout_compacted
+            total_dropped = error_dropped + stdout_dropped
+            if total_dropped:
+                response["log_lines_dropped"] = total_dropped
+        return response
 
     except subprocess.TimeoutExpired:
         return {
@@ -189,12 +230,20 @@ def validate_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, Any
             os.remove(tmp_path)
 
 
-def summarize_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, Any]:
+def summarize_scene(
+    script_content: str, *, timeout_s: int = 30, verbose: bool = False
+) -> Dict[str, Any]:
     """Builds the scene graph and returns a structured summary + basic rule checks.
 
     This does not call Sofa.Simulation.init/animate; it's intended for fast inspection
     and verification of scene structure.
+
+    `verbose=False` (default) compacts the failure-path `error` field via
+    the shared allowlist + tail-anchor filter. The success path returns
+    only the parsed `SCENE_SUMMARY_JSON:` payload, so stdout never reaches
+    the caller and `verbose` has no effect.
     """
+    from sofa_mcp._log_compact import compact_log
 
     python_path = os.path.expanduser("~/venv/bin/python")
     create_scene_function = _build_scene_source(script_content)
@@ -203,6 +252,15 @@ def summarize_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, An
     with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as tmp:
         tmp.write(summary_wrapper)
         tmp_path = tmp.name
+
+    def _failure(message: str, error: str) -> Dict[str, Any]:
+        response: Dict[str, Any] = {"success": False, "message": message, "error": error}
+        if not verbose:
+            compacted, dropped = compact_log(error or "")
+            response["error"] = compacted
+            if dropped:
+                response["log_lines_dropped"] = dropped
+        return response
 
     try:
         result = subprocess.run(
@@ -213,11 +271,7 @@ def summarize_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, An
         )
 
         if result.returncode != 0:
-            return {
-                "success": False,
-                "message": "Scene summary failed.",
-                "error": result.stderr or result.stdout,
-            }
+            return _failure("Scene summary failed.", result.stderr or result.stdout or "")
 
         summary_line = None
         for line in (result.stdout or "").splitlines()[::-1]:
@@ -226,11 +280,7 @@ def summarize_scene(script_content: str, *, timeout_s: int = 30) -> Dict[str, An
                 break
 
         if not summary_line:
-            return {
-                "success": False,
-                "message": "Scene summary did not produce JSON output.",
-                "error": result.stdout,
-            }
+            return _failure("Scene summary did not produce JSON output.", result.stdout or "")
 
         import json
 

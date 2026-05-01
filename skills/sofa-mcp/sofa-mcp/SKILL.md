@@ -86,6 +86,12 @@ Full schemas are exposed via the MCP `tools/list` endpoint. Quick reference by c
 
 For raw HTTP/curl debugging (rarely needed — agents use the MCP transport directly), see `references/curl-examples.md`.
 
+### `verbose` flag on log-returning tools
+
+`diagnose_scene`, `validate_scene`, and `summarize_scene` accept `verbose: bool = False`. By default they compact captured SOFA stdout/stderr to plugin loads, convergence summaries, errors/warnings, and tracebacks — the f-vector dumps from `EulerImplicitSolver`'s `printLog` are dropped. The response carries `log_lines_dropped: int` when the filter removed lines.
+
+Flip `verbose=True` only when you suspect the filter dropped a useful line: e.g. an unfamiliar `[INFO]` channel, an obscure deprecation message, or when the agent needs to debug the filter itself. Smell-test detection (`qp_infeasible_in_log` etc.) always runs against the full pre-compaction log, so `verbose=False` does not hide detected anomalies — it only hides the raw text those anomalies were derived from.
+
 ## Conventions
 
 - The scene file must define `def createScene(rootNode):`.

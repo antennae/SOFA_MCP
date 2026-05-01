@@ -33,14 +33,16 @@ def add_scene_content(rootNode):
 
     def test_validate_scene_success(self):
         script = """
-def add_scene_content(rootNode):
+def createScene(rootNode):
     rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
     rootNode.addObject("MechanicalObject", position=[0, 0, 0])
 
 """
         result = validate_scene(script)
         self.assertTrue(result["success"], f"Failed with: {result.get('error')}")
-        self.assertIn("SUCCESS:", result.get("stdout", ""))
+        # The SUCCESS: sentinel is internal to the validation wrapper and is
+        # extracted before the stdout field is exposed to the caller.
+        self.assertNotIn("SUCCESS: Scene initialized", result.get("stdout", ""))
 
     def test_write_scene_writes_file(self):
         script = """

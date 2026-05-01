@@ -106,6 +106,20 @@ Six rules ship + printLog activation + log truncation, per the plan-mode design 
 
 ---
 
+## Phase 6.3 #4 + #5 — `verbose` flag for log compaction ✅ (2026-04-30)
+
+Lifted ahead of Phase 6.1 Step 4 because every long debug session was paying ~30-50K tokens of `solver_logs` noise per `diagnose_scene` call (worst per-call token cost in the kit; ~30-40% of the dogfood session's MCP tokens). Plan at `~/.claude/plans/cosmic-bubbling-salamander.md`.
+
+- `sofa_mcp/_log_compact.py` (new, ~95 LOC): `compact_log(text, *, tail_lines=20) -> (text, dropped)`. Hybrid allowlist + tail-anchor filter, multi-line traceback state machine. Allowlist: `[ERROR]/[WARNING]/[FATAL]/[DEPRECATED]/[SUGGESTION]`, plugin loads, convergence/iterations/residual lines, `QP infeasible`, traceback markers, runtime-template sentinels.
+- `validate_scene` and `summarize_scene` accept `verbose: bool = False`. Validate's `SUCCESS:` sentinel now extracted+stripped (mirrors summarize's `SCENE_SUMMARY_JSON:` pattern) — removes a noise line from every successful response.
+- `diagnose_scene` accepts `verbose: bool = False`. Smell tests scan the full pre-compaction log; compaction runs after, then head/tail char truncation. Response carries `log_lines_dropped: int` when filtering happened.
+- `server.py` MCP wrappers pass `verbose` through; SKILL.md documents the flag.
+- 14 pure-function unit tests in `test/test_log_compact.py`; 1 integration test in `test_diagnostics.py` (verbose vs. compact comparison on cantilever_beam); 1 transport test in `test_mcp_transport.py`. Full affected suite: 45 tests passing.
+
+**Empirical ratio on cantilever_beam (steps=20, dt=0.01):** verbose=True 30748 chars / 59 visible lines, verbose=False 7070 chars / 35 lines, dropped=459. **4.35× cut on a non-stiff scene** that doesn't exercise EulerImplicitSolver f-vector dumps; cut expected closer to the user's reported ~10× on stiff scenes (e.g., the MOR-trunk dogfood scene).
+
+---
+
 ## Files created during completed work
 
 - `sofa_mcp/architect/_summary_runtime_template.py` (Step 1.5 runtime, ~690 LOC)

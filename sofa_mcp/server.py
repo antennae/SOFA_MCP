@@ -85,15 +85,23 @@ def find_indices_by_region(
 
 
 @mcp.tool()
-def validate_scene(script_content: str) -> dict:
-    """Validates a SOFA scene snippet by initializing and animating one step (dt=0.01)."""
-    return scene_writer.validate_scene(script_content)
+def validate_scene(script_content: str, verbose: bool = False) -> dict:
+    """Validates a SOFA scene snippet by initializing and animating one step (dt=0.01).
+
+    `verbose=False` (default) compacts captured SOFA stdout to plugin loads,
+    convergence, errors, and tracebacks. Set `verbose=True` for the full log.
+    """
+    return scene_writer.validate_scene(script_content, verbose=verbose)
 
 
 @mcp.tool()
-def summarize_scene(script_content: str) -> dict:
-    """Summarizes the scene graph (nodes/objects) and runs basic checks."""
-    return scene_writer.summarize_scene(script_content)
+def summarize_scene(script_content: str, verbose: bool = False) -> dict:
+    """Summarizes the scene graph (nodes/objects) and runs basic checks.
+
+    `verbose=False` (default) compacts captured SOFA stderr/stdout on the
+    failure path. Success path is unchanged (only the parsed summary is returned).
+    """
+    return scene_writer.summarize_scene(script_content, verbose=verbose)
 
 
 @mcp.tool()
@@ -172,9 +180,13 @@ def diagnose_scene(
     complaint: str = None,
     steps: int = 50,
     dt: float = 0.01,
+    verbose: bool = False,
 ) -> dict:
-    """Runs a sanity report for a SOFA scene: structural anomalies (Health Rules) plus per-step metrics (max displacement, max force, NaN-first-step) on every unmapped MechanicalObject. `complaint` is accepted for forward-compat and currently unused."""
-    return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt)
+    """Runs a sanity report for a SOFA scene: structural anomalies (Health Rules) plus per-step metrics (max displacement, max force, NaN-first-step) on every unmapped MechanicalObject. `complaint` is accepted for forward-compat and currently unused.
+
+    `verbose=False` (default) compacts `solver_logs` to plugin loads, convergence summaries, errors, warnings, and tracebacks. The response carries `log_lines_dropped: int` when filtering happened. Set `verbose=True` for the full captured log (still subject to head/tail char-budget truncation).
+    """
+    return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt, verbose=verbose)
 
 
 if __name__ == "__main__":

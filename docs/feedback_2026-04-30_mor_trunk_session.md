@@ -200,7 +200,7 @@ mapping's own subnode.
 
 ## Ergonomic friction
 
-### 6. `diagnose_scene` solver_logs are extremely verbose
+### 6. `diagnose_scene` solver_logs are extremely verbose ✅ (resolved 2026-04-30)
 
 The `solver_logs` field returns the full SOFA stdout, including
 ~2700+ lines of f-vector dumps from `EulerImplicitSolver`'s
@@ -215,6 +215,8 @@ were noise for diagnostic purposes.
 - last N lines if non-convergence detected
 
 The full log can stay opt-in for deep debugging.
+
+**Update (2026-04-30):** shipped. `diagnose_scene`, `validate_scene`, and `summarize_scene` now accept `verbose: bool = False`. Default compacts to allowlist + last-20-line tail anchor. Measured 4.35× cut on `cantilever_beam.py` (30748 → 7070 chars); higher cut expected on stiffer scenes that exercise `EulerImplicitSolver` printLog. See `docs/progress.md` "Phase 6.3 #4 + #5" entry.
 
 ### 7. Rule 9 acknowledged correct, but rule 7 simultaneously errored
 
@@ -259,6 +261,56 @@ section at the very top of SKILL.md, or a separate `references/cc-registration.m
 
 ---
 
+## Token-cost observations
+
+**Question asked:** is using the SOFA MCP very intensive on the token budget?
+
+**Yes, noticeably so.** Three main sources, in descending order of cost:
+
+### 1. `diagnose_scene` is the worst offender
+
+Each call returned ~2700+ lines of solver f-vector dumps in `solver_logs`
+(the `[INFO] [EulerImplicitSolver(odesolver)] initial f = ... and final
+f = ...` blocks). Even with the `<N lines elided>` truncation in the
+parent's view, the full string still has to flow through the agent's
+context. Two `diagnose_scene` calls in this session probably ate
+**~30-50K tokens** just on log noise that wasn't useful for the
+diagnostic question. (See item 6 above — the `verbose: false` flag
+would address this directly.)
+
+### 2. `summarize_scene` / `validate_scene` plugin-load output
+
+These responses also include the full SOFA stdout — every plugin load
+line, every `[INFO]` from `GenericConstraintCorrection` linking, etc.
+Smaller per call (~1-2K tokens) but they accumulate fast because an
+agent naturally calls them multiple times during iteration.
+
+### 3. `run_and_extract` is well-behaved
+
+Returns a path + small preview; the actual trajectory is on disk. Good
+design — keep this pattern as the model for any new tool that produces
+bulk numeric data.
+
+### Rough breakdown for this session
+
+- MCP tool outputs were maybe **30-40% of total tokens consumed**.
+- Compared to plain `Bash` + `Read` on local files, the MCP probably
+  increases per-task token usage by **~2-3×** because of the verbose
+  log fields, even though it reduces the number of round-trips needed.
+
+### Net trade
+
+Still positive for ergonomics (fewer manual cycles, structured output
+beats grepping stderr), but it's not free — and a long session with
+many MCP calls would burn context window faster than equivalent
+direct-bash workflows. The single biggest win would be the `verbose:
+false` flag on `diagnose_scene` (item 6) — filtering to convergence
+lines + errors/warnings + the metrics summary would cut the worst
+response by ~10×. Same idea for `validate_scene`: success bool + last
+20 lines on failure rather than the whole plugin-load log.
+
+---
+
 ## Suggested follow-up improvements (priority order)
 
 1. **Fix rule 7 false positives** (4, 5) — agents will second-guess
@@ -266,11 +318,11 @@ section at the very top of SKILL.md, or a separate `references/cc-registration.m
 2. **`write_scene` UTF-8** (3) — every long docstring will hit this.
 3. **`find_indices_by_region` VTK support** (1) — coverage gap on a
    primary format.
-4. **`diagnose_scene` verbose flag** (6) — output is currently
-   ~10× larger than it needs to be.
-5. **`get_plugins_for_components` deprecated/meta handling** (2) —
+4. ✅ **`diagnose_scene` verbose flag** (6) — shipped 2026-04-30. ~4.35× cut on cantilever_beam; higher on stiff scenes.
+5. ✅ **`validate_scene` / `summarize_scene` log compaction** — shipped 2026-04-30 (same shared filter). `SUCCESS:` sentinel now extracted+stripped from validate stdout.
+6. **`get_plugins_for_components` deprecated/meta handling** (2) —
    minor, but inconsistent with validator's behavior.
-6. **SKILL.md registration section** (8) — onboarding.
+7. **SKILL.md registration section** (8) — onboarding.
 
 ---
 

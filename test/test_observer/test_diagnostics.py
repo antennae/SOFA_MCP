@@ -426,3 +426,44 @@ def test_diagnose_scene_multimapping_lifts_structural_anomaly():
     hits = [a for a in result["anomalies"] if a.get("rule") == "multimapping_node_has_solver"]
     assert hits, f"expected multimapping_node_has_solver anomaly; got {result['anomalies']}"
     assert hits[0]["subject"] == "/root/combined"
+
+
+def test_diagnose_scene_verbose_flag_compacts_logs():
+    """Verbose=False (default) yields a strictly shorter solver_logs than
+    verbose=True; signal lines (plugin loads, convergence/iterations) and
+    smell-test slugs survive in both. Calibration target: ≥3× cut on the
+    cantilever_beam fixture (the user reported ~10× in the dogfood session;
+    we set the test bar lower to avoid flakiness from SOFA log variation).
+    """
+    scene_path = os.path.join(PROJECT_ROOT, "archiv", "cantilever_beam.py")
+    assert os.path.exists(scene_path)
+
+    full = diagnostics.diagnose_scene(scene_path, steps=20, dt=0.01, verbose=True)
+    compact = diagnostics.diagnose_scene(scene_path, steps=20, dt=0.01, verbose=False)
+
+    assert full["success"] is True
+    assert compact["success"] is True
+
+    full_logs = full["solver_logs"]
+    compact_logs = compact["solver_logs"]
+
+    # Verbose carries no `log_lines_dropped` (or zero); compact carries it.
+    assert "log_lines_dropped" not in full or full.get("log_lines_dropped", 0) == 0
+    assert compact.get("log_lines_dropped", 0) > 0
+
+    # Compact must be smaller than verbose.
+    assert len(compact_logs) < len(full_logs), (
+        f"compact={len(compact_logs)} >= full={len(full_logs)}"
+    )
+    # Calibration: cut by at least ~3× (allow tighter bar in CI; user saw ~10×).
+    assert len(full_logs) >= 3 * len(compact_logs), (
+        f"compact reduction too small: full={len(full_logs)} compact={len(compact_logs)}"
+    )
+
+    # Signal preservation: each compact log keeps at least one plugin-load and
+    # one convergence/iterations line (lower-cased to avoid case sensitivity).
+    compact_lc = compact_logs.lower()
+    assert "loaded plugin" in compact_lc, "expected at least one plugin-load line"
+    assert "iterations" in compact_lc or "converg" in compact_lc, (
+        "expected at least one convergence/iterations line"
+    )
