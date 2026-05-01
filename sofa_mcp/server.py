@@ -221,6 +221,8 @@ def perturb_and_run(
 ) -> dict:
     """Apply Data-field overrides (e.g. `{"/root/leg/ff": {"youngModulus": 1000}}`) before init, animate, return per-MO metrics. Use to test a hypothesis: "is the deformation small because the material is too stiff?" → halve youngModulus, re-run, see if displacement scales as expected.
 
+    Path can be an object path like `/root/beam/FEM` (single object) or a node path like `/root/beam` (fans out to every object on the node that exposes the field — prefer object paths when ambiguous).
+
     Logs are compacted by default; pass `verbose=True` for the full stream.
     """
     return probes.perturb_and_run(

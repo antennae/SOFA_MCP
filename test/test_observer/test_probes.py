@@ -87,6 +87,8 @@ def test_perturb_and_run_applies_youngmodulus_override():
     baseline_disp = max(baseline["metrics"]["max_displacement_per_mo"].values(), default=0.0)
 
     # Soften the beam — path is /root/beam/FEM (HexahedronFEMForceField named 'FEM').
+        # 'FEM' is the name of HexahedronFEMForceField in archiv/cantilever_beam.py;
+        # if that fixture renames or replaces the FF, update this path.
     softer = probes.perturb_and_run(
         scene_path=scene_path,
         parameter_changes={"/root/beam/FEM": {"youngModulus": 100.0}},

@@ -159,6 +159,13 @@ def perturb_and_run(
     (`{"/path": {"field": value, ...}, ...}`) before init, animate for
     `steps` steps, return per-MO metrics.
 
+    Path forms:
+      - `"/root/beam/FEM"` (object path) — patch the named object's field.
+      - `"/root/beam"` (node path, no object suffix) — fan out: patch
+        every object on that node that exposes the field. Surprising if
+        multiple objects on the node share a field name; prefer object
+        paths when in doubt.
+
     Returns:
         {success, parameter_changes_applied, parameter_changes_failed,
          metrics: {nan_first_step, max_displacement_per_mo,
