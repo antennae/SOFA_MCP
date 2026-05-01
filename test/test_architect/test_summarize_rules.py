@@ -411,6 +411,81 @@ def createScene(rootNode):
     assert not rule_7_errors, f"Shell-FEM exemption failed: {rule_7_errors}"
 
 
+def test_rule_7_meshtopology_src_link_to_vtk_loader_is_volumetric():
+    """Regression: MeshTopology(src='@loader') with a sibling MeshVTKLoader
+    pointing at a .vtk file should NOT trigger rule 7. The previous check
+    only looked at MeshTopology.filename and missed the src-link pattern.
+    Verbatim from docs/feedback_2026-04-30 bug 4."""
+    plugins = list(P_BASE) + [
+        "Sofa.Component.IO.Mesh",                       # MeshVTKLoader
+        "Sofa.Component.Topology.Container.Constant",   # MeshTopology
+    ]
+    import os
+    vtk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "meshes", "prostate.vtk"))
+    assert os.path.exists(vtk_path), "test depends on meshes/prostate.vtk fixture"
+    script = f'''
+def createScene(rootNode):
+    rootNode.gravity = [0, -9.81, 0]
+    {_plugins_block(plugins)}
+    rootNode.addObject("DefaultAnimationLoop")
+    body = rootNode.addChild("body")
+    body.addObject("EulerImplicitSolver")
+    body.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixMat3x3d")
+    body.addObject("MeshVTKLoader", name="loader", filename={vtk_path!r})
+    body.addObject("MeshTopology", src="@loader")
+    body.addObject("MechanicalObject", template="Vec3d")
+    body.addObject("UniformMass", totalMass=1.0)
+    body.addObject("TetrahedronFEMForceField", youngModulus=1000, poissonRatio=0.3)
+'''
+    checks = _checks(_summarize(script))
+    rule_7_errors = [c for c in checks if c["rule"] == "rule_7_topology" and c["severity"] == "error"]
+    assert not rule_7_errors, (
+        f"MeshTopology(src='@loader') from .vtk should be detected as volumetric; "
+        f"got {rule_7_errors}"
+    )
+
+
+def test_rule_7_barycentric_in_subnode_whose_parent_uses_vtk_loader():
+    """Regression: BarycentricMapping in a child of a node whose volumetric
+    topology comes via MeshTopology(src='@loader') should NOT trigger
+    rule 7B. The rule already walks up to the parent; the bug was that
+    _node_is_volumetric returned False on the loader-fed parent (same
+    root cause as test_rule_7_meshtopology_src_link_to_vtk_loader_is_volumetric).
+    Verbatim from docs/feedback_2026-04-30 bug 5."""
+    plugins = list(P_BASE) + [
+        "Sofa.Component.IO.Mesh",
+        "Sofa.Component.Topology.Container.Constant",
+        "Sofa.Component.Mapping.Linear",   # BarycentricMapping
+        "Sofa.GL.Component.Rendering3D",   # OglModel
+    ]
+    import os
+    vtk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "meshes", "prostate.vtk"))
+    assert os.path.exists(vtk_path), "test depends on meshes/prostate.vtk fixture"
+    script = f'''
+def createScene(rootNode):
+    rootNode.gravity = [0, -9.81, 0]
+    {_plugins_block(plugins)}
+    rootNode.addObject("DefaultAnimationLoop")
+    body = rootNode.addChild("body")
+    body.addObject("EulerImplicitSolver")
+    body.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixMat3x3d")
+    body.addObject("MeshVTKLoader", name="loader", filename={vtk_path!r})
+    body.addObject("MeshTopology", src="@loader")
+    body.addObject("MechanicalObject", template="Vec3d")
+    body.addObject("UniformMass", totalMass=1.0)
+    body.addObject("TetrahedronFEMForceField", youngModulus=1000, poissonRatio=0.3)
+    cable = body.addChild("cable")
+    cable.addObject("MechanicalObject", template="Vec3d", position=[[0,0,0]])
+    cable.addObject("BarycentricMapping")
+'''
+    checks = _checks(_summarize(script))
+    rule_7_errors = [c for c in checks if c["rule"] == "rule_7_topology" and c["severity"] == "error"]
+    assert not rule_7_errors, (
+        f"BarycentricMapping with loader-fed volumetric parent should not trigger rule 7; "
+        f"got {rule_7_errors}"
+    )
+
+
 # =============================================================================
 # Rule 8 — Collision pipeline
 # =============================================================================

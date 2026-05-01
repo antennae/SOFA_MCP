@@ -408,6 +408,38 @@ _VOLUMETRIC_TOPO_CLASSES = {
 _SHELL_FEM_CLASSES = {"TriangularFEMForceField", "QuadBendingFEMForceField"}
 
 
+def _resolve_topology_filename(obj):
+    """For a MeshTopology-like component, return the file it loads from.
+
+    Two patterns:
+      1. Direct: `MeshTopology(filename="...")` — return the filename Data.
+      2. Via loader: `MeshTopology(src="@loader")` paired with a sibling
+         MeshVTKLoader/MeshOBJLoader/MeshGmshLoader. Scan sibling objects in
+         the same node for a mesh loader (class name ends with "Loader") that
+         has a `filename` Data — follow whichever sibling has a non-empty one.
+
+    Returns the filename string, or None if neither pattern resolves.
+    """
+    fname = _data_value(obj, "filename")
+    if fname and isinstance(fname, str):
+        return fname
+    try:
+        ctx = obj.getContext() if hasattr(obj, "getContext") else None
+        if ctx is None:
+            return None
+        for sibling in getattr(ctx, "objects", []):
+            if sibling is obj:
+                continue
+            sib_cls = _safe_class_name(sibling)
+            if sib_cls.endswith("Loader"):
+                loader_fname = _data_value(sibling, "filename")
+                if loader_fname and isinstance(loader_fname, str):
+                    return loader_fname
+    except Exception:
+        return None
+    return None
+
+
 def _node_is_volumetric(node):
     """Heuristic: does this node carry a topology container that supports tetra/hexa elements?"""
     for obj in getattr(node, "objects", []):
@@ -415,8 +447,8 @@ def _node_is_volumetric(node):
         if cls in _VOLUMETRIC_TOPO_CLASSES:
             return True
         if cls == "MeshTopology":
-            fname = _data_value(obj, "filename")
-            if fname and isinstance(fname, str) and fname.lower().endswith((".vtk", ".msh", ".vtu")):
+            fname = _resolve_topology_filename(obj)
+            if fname and fname.lower().endswith((".vtk", ".msh", ".vtu")):
                 return True
         if cls in {"RegularGridTopology", "SparseGridTopology"}:
             n_data = _data_value(obj, "n")
