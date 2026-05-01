@@ -13,6 +13,7 @@ import sofa_mcp.architect.scene_writer as scene_writer
 import sofa_mcp.observer.stepping as stepping
 import sofa_mcp.observer.renderer as renderer
 import sofa_mcp.observer.diagnostics as diagnostics
+from sofa_mcp.observer import probes
 import sofa_mcp.optimizer.patcher as patcher
 
 # Create the MCP server instance
@@ -187,6 +188,27 @@ def diagnose_scene(
     `verbose=False` (default) compacts `solver_logs` to plugin loads, convergence summaries, errors, warnings, and tracebacks. The response carries `log_lines_dropped: int` when filtering happened. Set `verbose=True` for the full captured log (still subject to head/tail char-budget truncation).
     """
     return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt, verbose=verbose)
+
+
+@mcp.tool()
+def enable_logs_and_run(
+    scene_path: str,
+    log_targets: list,
+    steps: int = 5,
+    dt: float = 0.01,
+    verbose: bool = False,
+) -> dict:
+    """Toggle printLog=True on objects matching `log_targets` (class names or node-path fragments), animate for `steps` iterations, return the captured logs.
+
+    Use this after `diagnose_scene` flags an anomaly to inspect what a specific solver, mapping, or constraint is doing at runtime. Logs are compacted by default; pass `verbose=True` for the full stream.
+    """
+    return probes.enable_logs_and_run(
+        scene_path=scene_path,
+        log_targets=log_targets,
+        steps=steps,
+        dt=dt,
+        verbose=verbose,
+    )
 
 
 if __name__ == "__main__":
