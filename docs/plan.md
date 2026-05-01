@@ -29,7 +29,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 | Phase | Status | Notes |
 |---|---|---|
 | 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3 done (see progress.md); Steps 4–5 pending |
-| 6.3 — Field-feedback punch list | 🚧 partial | items #4 + #5 (verbose flag) shipped 2026-04-30; 6 of 8 still pending |
+| 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5 shipped (2026-04-30 / 2026-05-02); 4 of 8 still pending |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ pending | M3 gate |
 | 6.2 — Inverse-problem solver | ⏳ pending | M6 gate |
@@ -90,8 +90,8 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 
 | # | Item | Severity | Why it matters |
 |---|---|---|---|
-| 1 | **Rule 7 false positives** — `MeshTopology(src='@loader')` from `.vtk` flagged non-volumetric; `BarycentricMapping` parent check doesn't walk *up* to find topology (cable subnodes false-positive) | medium | agents will second-guess correct scenes; user without `validate_scene` reflex might rewrite a working scene |
-| 2 | **`write_scene` UTF-8 encoding** — fails on em-dashes in docstrings (same bug class as the Step 1.5+ encoding fix in `scene_writer.py:149,203`, but `write_scene` was missed) | medium | every multi-paragraph docstring an LLM agent writes hits this |
+| 1 | ✅ **Rule 7 false positives** — shipped 2026-05-02. `MeshTopology(src='@loader')` from `.vtk` flagged non-volumetric; `BarycentricMapping` parent check doesn't walk *up* to find topology (cable subnodes false-positive) | medium | agents will second-guess correct scenes; user without `validate_scene` reflex might rewrite a working scene |
+| 2 | ✅ **`write_scene` UTF-8 encoding** — shipped 2026-05-02. Fails on em-dashes in docstrings (same bug class as the Step 1.5+ encoding fix in `scene_writer.py:149,203`, but `write_scene` was missed) | medium | every multi-paragraph docstring an LLM agent writes hits this |
 | 3 | **`find_indices_by_region` VTK support** — returns "Could not extract vertices" on `.vtk` (a primary SOFA mesh format) | medium | coverage gap on a primary format; ROM workflows often need exact tip/fixed-end indices at script-author time |
 | 4 | ✅ **`diagnose_scene` verbose flag** — shipped 2026-04-30. Hybrid allowlist + tail-anchor filter via shared `sofa_mcp/_log_compact.py`. Default `verbose=False` cuts `solver_logs` ~4× on cantilever_beam (30748 → 7070 chars); ratio expected higher on stiffer scenes where `EulerImplicitSolver` printLog dominates. Smell tests still scan the full pre-compaction log | **high** | was the worst per-call token cost — 2 calls × ~30-50K tokens of log noise in the dogfood session |
 | 5 | ✅ **`validate_scene` / `summarize_scene` log compaction** — shipped 2026-04-30 alongside #4 using the same shared filter. Validate's `SUCCESS:` sentinel now extracted+stripped (mirrors summarize's `SCENE_SUMMARY_JSON:` pattern). `verbose: bool = False` on both | medium | every iteration of the draft → summarize → validate loop now pays a smaller log cost |

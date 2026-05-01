@@ -120,6 +120,35 @@ Lifted ahead of Phase 6.1 Step 4 because every long debug session was paying ~30
 
 ---
 
+## Phase 6.3 #1 + #2 — Rule 7 false positives + write_scene UTF-8 ✅ (2026-05-02)
+
+Two field-feedback bugs from the MOR-trunk dogfood session, fixed in
+two commits.
+
+- **`write_scene` UTF-8** (`6bbe028`): now opens its output file with
+  `encoding="utf-8"`. Same pattern that already landed at
+  `scene_writer.py:149,203` for the validate/summarize tempfiles.
+  Test forces `LC_ALL=C` to reproduce the locale-ASCII fallback the
+  FastMCP server hits in production.
+- **Rule 7 false positives** (`14b9f8b` + `103895f` follow-up):
+  `_summary_runtime_template.py` adds `_resolve_topology_filename`,
+  which detects `MeshTopology(src='@loader')` paired with a sibling
+  mesh loader (class name ends with `Loader`) and reads the loader's
+  `filename`. SOFA's Python API does not expose the `src` link via
+  `findLink`, so sibling-scanning is used instead — the canonical
+  `MeshVTKLoader` + `MeshTopology` pattern is fully covered. Resolves
+  both rule-7 false positives reported by the user (4: `TetrahedronFEM`
+  with loader-fed `MeshTopology`; 5: `BarycentricMapping` whose parent
+  uses the same pattern). Test fixtures use `meshes/prostate.vtk`. The
+  follow-up commit narrows a too-broad `try/except` per code review.
+
+Residual gap: `src="@../path/to/loader"` cross-node references are
+not resolved (sibling-scan is same-node only). The canonical SOFA
+pattern uses same-node loaders, so this is acceptable; flagged for
+future work if a real scene hits it.
+
+---
+
 ## Files created during completed work
 
 - `sofa_mcp/architect/_summary_runtime_template.py` (Step 1.5 runtime, ~690 LOC)

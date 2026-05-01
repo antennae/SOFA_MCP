@@ -85,7 +85,7 @@ output: {
 **Severity:** low (doesn't block — `validate_scene` catches the real
 issue), but inconsistent UX between this tool and the validator.
 
-### 3. `write_scene` ASCII-encodes content
+### 3. `write_scene` ASCII-encodes content ✅ (resolved 2026-05-02)
 
 ```
 input:  script_content has em-dash (—) in a docstring
@@ -148,7 +148,7 @@ deformation — exactly the thing you want to see.
 
 ## False-positive health rules (Rule 7)
 
-### 4. `MeshTopology` from `.vtk` flagged as non-volumetric
+### 4. `MeshTopology` from `.vtk` flagged as non-volumetric ✅ (resolved 2026-05-02)
 
 ```
 summarize_scene response (and diagnose_scene anomaly):
@@ -168,7 +168,7 @@ as valid — but the check apparently doesn't follow the loader to
 inspect its filename extension. SOFA actually initializes the scene
 fine.
 
-### 5. `BarycentricMapping` flagged as non-volumetric parent on cable subnodes
+### 5. `BarycentricMapping` flagged as non-volumetric parent on cable subnodes ✅ (resolved 2026-05-02)
 
 ```
 {
@@ -313,9 +313,8 @@ response by ~10×. Same idea for `validate_scene`: success bool + last
 
 ## Suggested follow-up improvements (priority order)
 
-1. **Fix rule 7 false positives** (4, 5) — agents will second-guess
-   correct scenes.
-2. **`write_scene` UTF-8** (3) — every long docstring will hit this.
+1. ✅ **Fix rule 7 false positives** (4, 5) — shipped 2026-05-02.
+2. ✅ **`write_scene` UTF-8** (3) — shipped 2026-05-02.
 3. **`find_indices_by_region` VTK support** (1) — coverage gap on a
    primary format.
 4. ✅ **`diagnose_scene` verbose flag** (6) — shipped 2026-04-30. ~4.35× cut on cantilever_beam; higher on stiff scenes.
