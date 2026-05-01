@@ -425,18 +425,18 @@ def _resolve_topology_filename(obj):
         return fname
     try:
         ctx = obj.getContext() if hasattr(obj, "getContext") else None
-        if ctx is None:
-            return None
-        for sibling in getattr(ctx, "objects", []):
-            if sibling is obj:
-                continue
-            sib_cls = _safe_class_name(sibling)
-            if sib_cls.endswith("Loader"):
-                loader_fname = _data_value(sibling, "filename")
-                if loader_fname and isinstance(loader_fname, str):
-                    return loader_fname
     except Exception:
+        ctx = None
+    if ctx is None:
         return None
+    for sibling in getattr(ctx, "objects", []):
+        if sibling is obj:
+            continue
+        sib_cls = _safe_class_name(sibling)
+        if sib_cls.endswith("Loader"):
+            loader_fname = _data_value(sibling, "filename")
+            if loader_fname and isinstance(loader_fname, str):
+                return loader_fname
     return None
 
 

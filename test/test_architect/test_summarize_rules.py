@@ -420,7 +420,6 @@ def test_rule_7_meshtopology_src_link_to_vtk_loader_is_volumetric():
         "Sofa.Component.IO.Mesh",                       # MeshVTKLoader
         "Sofa.Component.Topology.Container.Constant",   # MeshTopology
     ]
-    import os
     vtk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "meshes", "prostate.vtk"))
     assert os.path.exists(vtk_path), "test depends on meshes/prostate.vtk fixture"
     script = f'''
@@ -458,7 +457,6 @@ def test_rule_7_barycentric_in_subnode_whose_parent_uses_vtk_loader():
         "Sofa.Component.Mapping.Linear",   # BarycentricMapping
         "Sofa.GL.Component.Rendering3D",   # OglModel
     ]
-    import os
     vtk_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "meshes", "prostate.vtk"))
     assert os.path.exists(vtk_path), "test depends on meshes/prostate.vtk fixture"
     script = f'''
