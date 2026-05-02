@@ -1,6 +1,6 @@
 # SOFA_MCP — Portfolio Polish, Community-Ready Posture
 
-*Last updated 2026-04-30 (Step 3 shipped)* — forward-looking only. For completed work, see `docs/progress.md`. Technical reference for the diagnose toolkit lives in `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md`.
+*Last updated 2026-05-02 (Step 4 shipped + Phase 6.3 items #1, #2, #4, #5)* — forward-looking only. For completed work, see `docs/progress.md`. Technical reference for the diagnose toolkit lives in `docs/specs/2026-04-26-diagnose-scene-plan-v2.1.md`.
 
 ## Context
 
@@ -99,15 +99,13 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 | 7 | **SKILL.md: `claude mcp add` registration section** — agent had to figure out the `--scope user` vs project-scope footgun and the `/mcp` reconnect step on its own | low | onboarding gap for new users |
 | 8 | **`render_scene_snapshot` shows convex hull, not mesh geometry** — PyVista falls back to point-cloud→hull rendering because no topology is passed; cable-subnode point clouds get rolled in too | medium-high | the render tool exists for visual sanity ("did gravity pull the right way?"); a hull obscures exactly the deformation you want to see |
 
-**Strategic note:** the user assessed the MCP as "net positive — `validate_scene` and `diagnose_scene` together caught the deprecation + verified physics in two calls, work that would have been ~5 manual cycles otherwise." Friction is concentrated in three areas: (a) false-positive health rules, (b) verbose log volume / token cost, and (c) the convex-hull render. None of these blocked the task. Items #1, #2, #4, and #8 have the highest "agent embarrassment" or token-cost impact and are prime candidates to interleave ahead of Step 4. Item #4 in particular has cross-cutting leverage — every long debug session pays it.
+**Strategic note:** the user assessed the MCP as "net positive — `validate_scene` and `diagnose_scene` together caught the deprecation + verified physics in two calls, work that would have been ~5 manual cycles otherwise." Friction was concentrated in three areas: (a) false-positive health rules, (b) verbose log volume / token cost, and (c) the convex-hull render. After 2026-05-02: areas (a) and (b) are resolved; (c) — item #8 — is the remaining medium-high friction. Items #3, #6, #7 are lower-severity ergonomic gaps that don't block agent workflows.
 
 ---
 
 ## Suggested execution order
 
-**6.1 Step 4 (default next)** → 6.1 Step 5 → 6.3 (field-feedback punch list) → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 4 (README rewrite, last so it can showcase everything that actually works).
-
-Alt order if user-facing polish or token budget matters more than completing the debug toolkit: lift the high-leverage 6.3 items (#1 rule-7 FPs, #2 write_scene UTF-8, #4 diagnose_scene verbose flag, #8 render geometry) ahead of Step 4 — these directly affect agent embarrassment / token cost in real authoring sessions, while Step 4's probe library is mostly load-bearing for the M5 gate. #4 in particular has the strongest case for jumping the queue, since every long debug session (including the M5 gate runs themselves) pays its cost.
+**6.1 Step 5 (default next — closes M5 gate)** → 6.3 #8 (render geometry, the remaining medium-high friction) → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups) → 4 (README rewrite, last so it can showcase everything that actually works).
 
 If energy is constrained: ship Phases 1–5 as v0.1 (portfolio-ready), sit on it, decide whether Phase 6.2 is worth the investment based on whether anyone actually finds and uses v0.1.
 
@@ -149,17 +147,17 @@ End-state check that proves the whole plan worked:
 6. `run_inverse_problem` on a tri-leg variant + target reaches target within tolerance.
 7. `pytest test/` exits 0 (after Phase 5 test fixes).
 8. README cold-read passes M4.
-9. `tools/list` returns ~17 tools, all of which appear somewhere in README or SKILL workflow.
+9. `tools/list` returns ~21 tools, all of which appear somewhere in README or SKILL workflow.
 
 ---
 
 ## Effort estimate (remaining work)
 
-- Phase 6.1 Steps 4-5: ~half a day
-- Phase 6.3 (field-feedback punch list): ~half a day for items #1/#2/#3/#6 (rule fixes + encoding + VTK reader + cache cleanup), ~half a day for #4 + #5 together (verbose flag pattern reused across `diagnose_scene` + `validate_scene` + `summarize_scene`), plus ~half a day for #8 (render geometry). So ~half a day minimum, ~1.5 days for the full punch list.
+- Phase 6.1 Step 5 (M5 gate): ~half a day — 4 fixture scenes + E2E pytest + manual M5 checklist.
+- Phase 6.3 remaining: ~half a day for #8 (render geometry, medium-high), ~half a day for #3 + #6 + #7 (VTK reader, deprecated/meta plugin handling, MCP registration docs — all low severity).
 - Phase 3: ~half a day
 - Phase 6.2: ~1 day
 - Phase 5: ~half a day
 - Phase 4: ~1 day
 
-**Remaining: ~4-5 days sequentially** (was ~3-4 before 6.3 landed). Less if phases parallelize. End state reads as a *capable* tool, not just a polished one. Phases 1-5 ship as v0.1 (portfolio-ready); 6.2 lands as v0.2 (the substantive features that earn the deeper claim).
+**Remaining: ~3.5-4 days sequentially** (down from ~4-5 after Step 4 + Phase 6.3 high-leverage items shipped). Less if phases parallelize. End state reads as a *capable* tool, not just a polished one. Phases 1-5 ship as v0.1 (portfolio-ready); 6.2 lands as v0.2 (the substantive features that earn the deeper claim).
