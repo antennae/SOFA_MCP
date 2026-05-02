@@ -29,7 +29,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 | Phase | Status | Notes |
 |---|---|---|
 | 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3, 4 done; Step 5 automated half done 2026-05-02; M5 manual gate awaiting user verification per docs/specs/2026-05-02-m5-gate.md |
-| 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5 shipped (2026-04-30 / 2026-05-02); 4 of 8 still pending |
+| 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5, #8 shipped (2026-04-30 / 2026-05-02); 3 of 8 still pending (low-severity #3, #6, #7) |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ deferred | M3 gate; deprioritized 2026-05-02 — beginner-install ergonomics, not portfolio-critical |
 | 6.2 — Inverse-problem solver | ⏳ pending | M6 gate |
@@ -107,9 +107,9 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 | 5 | ✅ **`validate_scene` / `summarize_scene` log compaction** — shipped 2026-04-30 alongside #4 using the same shared filter. Validate's `SUCCESS:` sentinel now extracted+stripped (mirrors summarize's `SCENE_SUMMARY_JSON:` pattern). `verbose: bool = False` on both | medium | every iteration of the draft → summarize → validate loop now pays a smaller log cost |
 | 6 | **`get_plugins_for_components` deprecated/meta handling** — `GenericConstraintSolver` returns "not found" instead of "deprecated, use NNCGConstraintSolver"; `RequiredPlugin` (meta) returns "not found" rather than being silently skipped | low | inconsistent with `validate_scene`'s clean migration message |
 | 7 | **SKILL.md: `claude mcp add` registration section** — agent had to figure out the `--scope user` vs project-scope footgun and the `/mcp` reconnect step on its own | low | onboarding gap for new users |
-| 8 | **`render_scene_snapshot` shows convex hull, not mesh geometry** — PyVista falls back to point-cloud→hull rendering because no topology is passed; cable-subnode point clouds get rolled in too | medium-high | the render tool exists for visual sanity ("did gravity pull the right way?"); a hull obscures exactly the deformation you want to see |
+| 8 | ✅ **`render_scene_snapshot` shipped explicit-triangle rendering 2026-05-02** — reads OglModel `position` + `triangles` (decomposes `quads` if needed); falls back to MO + sibling topology, then to point glyph cloud. Hull fallback removed. Regression test in `test/test_observer/test_renderer.py`. | shipped | — |
 
-**Strategic note:** the user assessed the MCP as "net positive — `validate_scene` and `diagnose_scene` together caught the deprecation + verified physics in two calls, work that would have been ~5 manual cycles otherwise." Friction was concentrated in three areas: (a) false-positive health rules, (b) verbose log volume / token cost, and (c) the convex-hull render. After 2026-05-02: areas (a) and (b) are resolved; (c) — item #8 — is the remaining medium-high friction. Items #3, #6, #7 are lower-severity ergonomic gaps that don't block agent workflows.
+**Strategic note:** the user assessed the MCP as "net positive — `validate_scene` and `diagnose_scene` together caught the deprecation + verified physics in two calls, work that would have been ~5 manual cycles otherwise." Friction was concentrated in three areas: (a) false-positive health rules, (b) verbose log volume / token cost, and (c) the convex-hull render. As of 2026-05-02 all three are resolved. Items #3, #6, #7 are lower-severity ergonomic gaps that don't block agent workflows.
 
 ---
 
@@ -117,7 +117,7 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 
 Portfolio-first ordering (2026-05-02): the project is primarily a portfolio piece, secondarily a beginner-friendly tool. That moves visible artifacts (renders, headline demo, README) ahead of install ergonomics (Docker).
 
-**M5 manual gate (user-driven, blocks Phase 6.1 close)** in parallel with **6.3 #8 (render mesh geometry, default next code work — biggest visual win for screenshots)** → 6.2 (inverse-problem solver, the headline demo) → 5 (LICENSE + fix two broken test files) → 4 (README rewrite — the actual portfolio artifact, last so it can showcase #8 and #6.2) → 3 (Docker, deferred — beginner-install ergonomics, not portfolio) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups).
+**M5 manual gate (user-driven, blocks Phase 6.1 close)** in parallel with **6.2 (inverse-problem solver, the headline demo and default next code work)** → 5 (LICENSE + fix two broken test files) → 4 (README rewrite — the actual portfolio artifact, last so it can showcase #8 + #6.2) → 3 (Docker, deferred — beginner-install ergonomics, not portfolio) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups).
 
 The M5 gate is the user running Claude against the four fixtures at `test/test_observer/fixtures/m5_*.py` and grading per `docs/specs/2026-05-02-m5-gate.md` — strict 3-criterion-per-fixture rubric. Until M5 passes, Phase 6.1 stays officially open even though all the code shipped.
 
@@ -167,7 +167,7 @@ End-state check that proves the whole plan worked. Items 1–6 are the portfolio
 ## Effort estimate (remaining work)
 
 - Phase 6.1 M5 manual gate: ~30 min user time — run Claude against 4 fixtures, grade per checklist. Code half is shipped.
-- Phase 6.3 remaining: ~half a day for #8 (render geometry, medium-high), ~half a day for #3 + #6 + #7 (VTK reader, deprecated/meta plugin handling, MCP registration docs — all low severity).
+- Phase 6.3 remaining: ~half a day total for #3 + #6 + #7 (VTK reader, deprecated/meta plugin handling, MCP registration docs — all low severity).
 - Phase 3: ~half a day
 - Phase 6.2: ~1 day
 - Phase 5: ~half a day

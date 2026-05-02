@@ -276,3 +276,19 @@ tests we never shipped (`actuator_lambda_zero`, `child_only_motion`,
 etc.) and probes we deferred (`compare_scenes`). The fixtures here
 are derived from the actual diagnostic surface; the M5 doc explicitly
 supersedes the v2.1 fixture table.
+
+## Phase 6.3 #8 — `render_scene_snapshot` mesh geometry ✅ (2026-05-02)
+
+Replaced the "MO points → Delaunay-3D → convex hull on failure" pipeline with explicit-triangle rendering. The renderer now does two-pass discovery:
+
+1. **Visual models** — every `OglModel` / `VisualModelImpl` is rendered using its own `position` + `triangles` Data fields (or `quads` decomposed into triangles, when `triangles` is empty). Color comes from the visual model's own `color` Data when set.
+2. **Topology fallback** — for nodes not covered by pass 1, a sibling topology container's triangles/quads are used with the MO's position. Lets simple scenes without an OglModel still render properly.
+3. **Point-cloud final fallback** — only if neither pass produced any geometry, every unmapped MO is drawn as a point glyph cloud. The renderer never builds a convex hull.
+
+Cable subnodes (sparse MOs with no surface) are filtered naturally: they're not visual models and they have no triangle topology, so they only show up if nothing else rendered — which doesn't happen for any real scene.
+
+**Empirical confirmation:** `archiv/tri_leg_cables.py` exposed `position=44 triangles=102 quads=51` per OglModel after init+animate, matching the expected leg surface. Render of the same scene now shows three distinct deformed legs with visible surface mesh (vs. three convex-hull blobs before); the actuated leg is clearly bent toward the common pull point.
+
+**Tests:** `test/test_observer/test_renderer.py` — asserts `tri_leg_cables` renders exactly 3 visual models (one per leg, cables excluded), and a topology-only fixture (`render_no_visual_fallback.py`) renders without hull or crash. Total adjacent-suite count: 82 passed.
+
+**SKILL.md:** added a one-liner pointing agents at OglModel as the renderer's primary input.

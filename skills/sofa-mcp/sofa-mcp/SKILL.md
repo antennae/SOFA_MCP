@@ -29,7 +29,7 @@ When the user says "I want a SOFA scene that ...":
 
 **For mesh-driven scenes:** before step 4, if the user has an STL but the FEM/topology you're planning needs tetrahedra, call `generate_volume_mesh(stl_path)` first. Use `mesh_stats` to learn the bounding box and element counts. Use `find_indices_by_region` to identify boundary or tip vertex indices for fixing/actuating.
 
-**For visual feedback:** after step 7, call `render_scene_snapshot(scene_path, steps=N)` to get a PNG of the final state. Useful for verifying the simulation produces the deformation you expected.
+**For visual feedback:** after step 7, call `render_scene_snapshot(scene_path, steps=N)` to get a PNG of the final state. The renderer reads explicit triangles from any `OglModel` in the scene, so for clean output add an `OglModel` (with `IdentityMapping` or `BarycentricMapping` to your mechanical state) before rendering. Without a visual model the renderer falls back to a point glyph cloud — useful as a debug view, not as a presentable image.
 
 ## Workflow: debug an existing scene that runs but misbehaves
 
