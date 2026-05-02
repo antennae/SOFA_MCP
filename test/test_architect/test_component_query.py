@@ -108,10 +108,14 @@ class TestComponentQuery(unittest.TestCase):
         self.assertIn("TetrahedronSetTopologyContainer", result2.get("matches", []))
 
 
-    @patch('sofa_mcp.architect.component_query.Sofa.Core')
-    def test_search_sofa_components_unavailable(self, mock_sofa_core):
-        # No ObjectFactory methods present / return empty list
-        mock_sofa_core.ObjectFactory.getInstance.return_value.getClassNames.return_value = []
+    @patch('sofa_mcp.architect.component_query._try_get_registered_component_names')
+    @patch('sofa_mcp.architect.plugin_cache.load_plugin_map')
+    def test_search_sofa_components_unavailable(self, mock_load, mock_live):
+        # Both the cache and the live-factory fallback return nothing →
+        # search_sofa_components must surface an error rather than a
+        # misleading empty match list.
+        mock_load.return_value = {}
+        mock_live.return_value = []
         result = search_sofa_components("anything")
         self.assertIn("error", result)
 

@@ -1,72 +1,70 @@
+import os
 import unittest
+
 from sofa_mcp.architect.scene_writer import (
-    write_and_test_scene,
-    validate_scene,
-    write_scene,
-    summarize_scene,
     load_scene,
     patch_scene,
+    summarize_scene,
+    validate_scene,
+    write_and_test_scene,
+    write_scene,
 )
-import os
-import pathlib
+
+
+MINIMAL_SCENE = """
+def createScene(rootNode):
+    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
+    rootNode.addObject("MechanicalObject", position=[0, 0, 0])
+"""
+
 
 class TestSceneWriter(unittest.TestCase):
     def test_summarize_scene(self):
-        script = """
-def add_scene_content(rootNode):
-    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
-    rootNode.addObject("MechanicalObject", position=[0, 0, 0])
-
-"""
-        result = summarize_scene(script)
+        result = summarize_scene(MINIMAL_SCENE)
         self.assertTrue(result["success"], f"Failed with: {result.get('error')}")
         self.assertGreaterEqual(result.get("node_count", 0), 1)
         self.assertGreaterEqual(result.get("object_count", 0), 1)
         self.assertGreaterEqual(result.get("mechanical_object_count", 0), 1)
 
-        checks = result.get("checks", [])
-        check_names = {c.get("name") for c in checks}
-        self.assertIn("has_mechanical_object", check_names)
-        self.assertIn("has_animation_loop", check_names)
-        self.assertIn("has_constraint_solver", check_names)
-        self.assertIn("baseline_components_present", check_names)
+        rule_slugs = {c.get("rule") for c in result.get("checks", [])}
+        # Each Health Rule emits one entry per scene (with severity ok / warning / error).
+        for slug in (
+            "rule_1_plugins",
+            "rule_2_animation_loop",
+            "rule_3_time_integration",
+            "rule_4_linear_solver",
+            "rule_5_constraint_handling",
+            "rule_6_forcefield_mapping",
+            "rule_7_topology",
+            "rule_8_collision_pipeline",
+            "rule_9_units",
+        ):
+            self.assertIn(slug, rule_slugs)
 
     def test_validate_scene_success(self):
-        script = """
-def createScene(rootNode):
-    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
-    rootNode.addObject("MechanicalObject", position=[0, 0, 0])
-
-"""
-        result = validate_scene(script)
+        result = validate_scene(MINIMAL_SCENE)
         self.assertTrue(result["success"], f"Failed with: {result.get('error')}")
         # The SUCCESS: sentinel is internal to the validation wrapper and is
         # extracted before the stdout field is exposed to the caller.
         self.assertNotIn("SUCCESS: Scene initialized", result.get("stdout", ""))
 
     def test_write_scene_writes_file(self):
-        script = """
-def add_scene_content(rootNode):
-    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
-    rootNode.addObject("MechanicalObject", position=[0, 0, 0])
-
-"""
         output_file = "written_scene.py"
-        result = write_scene(script, output_file)
-        self.assertTrue(result["success"])
-        self.assertTrue(os.path.exists(output_file))
+        try:
+            result = write_scene(MINIMAL_SCENE, output_file)
+            self.assertTrue(result["success"])
+            self.assertTrue(os.path.exists(output_file))
 
-        with open(output_file, "r") as f:
-            contents = f.read()
-        self.assertIn("def createScene", contents)
-        self.assertIn("def add_scene_content", contents)
-
-        if os.path.exists(output_file):
-            os.remove(output_file)
+            with open(output_file, "r", encoding="utf-8") as f:
+                contents = f.read()
+            self.assertIn("def createScene", contents)
+        finally:
+            if os.path.exists(output_file):
+                os.remove(output_file)
 
     def test_write_scene_handles_utf8_in_docstring(self):
-        # Em-dash (U+2014) and other unicode in a docstring used to crash
-        # write_scene with 'ascii' codec can't encode... — see docs/feedback_2026-04-30.
+        # Em-dash (U+2014) used to crash write_scene with 'ascii' codec
+        # can't encode... — see docs/feedback_2026-04-30.
         script = '''
 def createScene(rootNode):
     """Soft trunk scene — uses cable actuators."""
@@ -85,37 +83,24 @@ def createScene(rootNode):
                 os.remove(output_file)
 
     def test_load_scene_reads_file(self):
-        script = """
-def add_scene_content(rootNode):
-    rootNode.addObject(\"RequiredPlugin\", pluginName=\"Sofa.Component.StateContainer\")
-    rootNode.addObject(\"MechanicalObject\", position=[0, 0, 0])
-
-"""
         output_file = "load_scene_test.py"
         try:
-            write_scene(script, output_file)
+            write_scene(MINIMAL_SCENE, output_file)
             loaded = load_scene(output_file)
             self.assertTrue(loaded["success"], loaded.get("error"))
             self.assertIn("def createScene", loaded.get("content", ""))
-            self.assertIn("def add_scene_content", loaded.get("content", ""))
         finally:
             if os.path.exists(output_file):
                 os.remove(output_file)
 
     def test_patch_scene_insert_after_anchor(self):
-        script = """
-def add_scene_content(rootNode):
-    rootNode.addObject(\"RequiredPlugin\", pluginName=\"Sofa.Component.StateContainer\")
-    rootNode.addObject(\"MechanicalObject\", position=[0, 0, 0])
-
-"""
         output_file = "patch_scene_test.py"
         try:
-            write_scene(script, output_file)
+            write_scene(MINIMAL_SCENE, output_file)
 
             patch = {
                 "op": "insert_after",
-                "anchor": "def add_scene_content(rootNode):",
+                "anchor": "def createScene(rootNode):",
                 "text": "\n    # patched\n",
                 "occurrence": 1,
             }
@@ -129,14 +114,9 @@ def add_scene_content(rootNode):
                 os.remove(output_file)
 
     def test_patch_scene_fails_when_anchor_missing(self):
-        script = """
-def add_scene_content(rootNode):
-    rootNode.addObject(\"MechanicalObject\", position=[0, 0, 0])
-
-"""
         output_file = "patch_scene_missing_anchor.py"
         try:
-            write_scene(script, output_file)
+            write_scene(MINIMAL_SCENE, output_file)
             patch = {
                 "op": "insert_after",
                 "anchor": "THIS_ANCHOR_DOES_NOT_EXIST",
@@ -150,31 +130,29 @@ def add_scene_content(rootNode):
                 os.remove(output_file)
 
     def test_basic_scene(self):
-        script = """
-def add_scene_content(rootNode):
-    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
-    rootNode.addObject("MechanicalObject", position=[0, 0, 0])
-
-"""
         output_file = "test_scene.py"
-        result = write_and_test_scene(script, output_file)
-        
-        self.assertTrue(result["success"], f"Failed with: {result.get('error')}")
-        self.assertTrue(os.path.exists(output_file))
-        
-        if os.path.exists(output_file):
-            os.remove(output_file)
+        try:
+            result = write_and_test_scene(MINIMAL_SCENE, output_file)
+            self.assertTrue(result["success"], f"Failed with: {result.get('error')}")
+            self.assertTrue(os.path.exists(output_file))
+        finally:
+            if os.path.exists(output_file):
+                os.remove(output_file)
 
     def test_failing_scene(self):
-        # Missing add_scene_content
+        # No createScene defined → validation must fail loudly.
         script = """
 import Sofa
 """
         output_file = "failing_scene.py"
-        result = write_and_test_scene(script, output_file)
-        
-        self.assertFalse(result["success"])
-        self.assertIn("ERROR: The provided script_content must define a function called 'add_scene_content(parent_node)'", result["error"])
+        try:
+            result = write_and_test_scene(script, output_file)
+            self.assertFalse(result["success"])
+            self.assertIn("createScene", result.get("error", ""))
+        finally:
+            if os.path.exists(output_file):
+                os.remove(output_file)
+
 
 if __name__ == "__main__":
     unittest.main()

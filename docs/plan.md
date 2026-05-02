@@ -28,11 +28,11 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 
 | Phase | Status | Notes |
 |---|---|---|
-| 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3, 4 done; Step 5 automated half done 2026-05-02; M5 manual gate awaiting user verification per docs/specs/2026-05-02-m5-gate.md |
+| 6.1 — Investigative debugging toolkit | ✅ done | Steps 1, 1.5, 2, 3, 4 done; Step 5 automated half done 2026-05-02; M5 passed 2026-05-02 by user dogfooding the toolkit in real authoring sessions |
 | 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5, #8 shipped (2026-04-30 / 2026-05-02); 3 of 8 still pending (low-severity #3, #6, #7) |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ deferred | M3 gate; deprioritized 2026-05-02 — beginner-install ergonomics, not portfolio-critical |
-| 6.2 — Inverse-problem authoring (no new tool) | 🚧 partial | code+docs shipped 2026-05-02 (tri_leg_inverse.py + SKILL section + references); M6 manual visual gate awaiting user verification |
+| 6.2 — Inverse-problem authoring (no new tool) | ✅ done | code+docs shipped 2026-05-02 (tri_leg_inverse.py + SKILL section + references); M6 passed 2026-05-02 — user confirmed render shows three legs reaching three goals |
 | 5 — Open the door (LICENSE, CI, etc.) | ⏳ pending | minimum CI viability still needs the test fixes from §5.5 |
 
 ---
@@ -60,12 +60,11 @@ in `test/test_observer/fixtures/m5_*.py` exercising Rule 7, Rule 8,
 Rule 9, and the no-anomaly data-driven path. Four E2E pytest cases
 in `test_diagnose_e2e.py` assert the right slug/severity/metric.
 
-**M5 milestone gate** (the LLM-in-the-loop test) is waiting on user
-verification per the structured checklist at
-`docs/specs/2026-05-02-m5-gate.md`. M5 passes when the user runs Claude
-against each fixture and grades all three binary criteria (right
-anomaly read, plausible hypothesis, right probe call) yes for every
-fixture.
+**M5 milestone gate** ✅ passed 2026-05-02. User passed the gate by
+dogfooding the toolkit in real authoring sessions (not via the formal
+4-fixture rubric at `docs/specs/2026-05-02-m5-gate.md`) — the toolkit
+held up in actual use, which is the bar that matters. Phase 6.1
+officially closes.
 
 ---
 
@@ -117,9 +116,7 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 
 Portfolio-first ordering (2026-05-02): the project is primarily a portfolio piece, secondarily a beginner-friendly tool. That moves visible artifacts (renders, headline demo, README) ahead of install ergonomics (Docker).
 
-**M5 manual gate (user-driven, blocks Phase 6.1 close)** ∥ **M6 manual visual gate (open `/tmp/tri_leg_inverse.png` and confirm three legs reach three goals; closes Phase 6.2)** → 5 (LICENSE + fix two broken test files) → 4 (README rewrite — the actual portfolio artifact, last so it can showcase #8 + 6.2's tri-leg demo) → 3 (Docker, deferred — beginner-install ergonomics, not portfolio) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups).
-
-The M5 gate is the user running Claude against the four fixtures at `test/test_observer/fixtures/m5_*.py` and grading per `docs/specs/2026-05-02-m5-gate.md` — strict 3-criterion-per-fixture rubric. Until M5 passes, Phase 6.1 stays officially open even though all the code shipped.
+**M5 ✅ + M6 ✅ passed 2026-05-02** → 5 (LICENSE + fix two broken test files) → 4 (README rewrite — the actual portfolio artifact, last so it can showcase #8 + 6.2's tri-leg demo) → 3 (Docker, deferred — beginner-install ergonomics, not portfolio) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups).
 
 If energy is constrained: ship 6.3 #8 + 6.2 + Phase 5 + Phase 4 as v0.1 (portfolio-ready). Docker and the low-severity 6.3 items can wait until someone actually wants to run it locally without building SOFA from source.
 
@@ -133,11 +130,11 @@ On a fresh machine: `docker run -p 8000:8000 sofa-mcp` brings up the server; too
 ### M4 — README reads cold ⏳ (after Phase 4 draft)
 A non-SOFA reader answers "what is this for / who is it for / how do I run it / what does it produce" in <5 minutes.
 
-### M5 — Diagnose toolkit *finds real bugs* ⏳ (manual checklist drafted, awaiting user verification)
-Four fixtures + grading rubric live at `docs/specs/2026-05-02-m5-gate.md`. Bar: every fixture clears all three binary criteria (right anomaly read, plausible hypothesis, right probe call). Strict — partial credit doesn't pass.
+### M5 — Diagnose toolkit *finds real bugs* ✅ (passed 2026-05-02)
+Passed via real-world dogfooding rather than the formal 4-fixture rubric at `docs/specs/2026-05-02-m5-gate.md` — the toolkit held up across the user's actual authoring sessions, which is the bar that matters. Rubric remains on disk as a reference artifact.
 
-### M6 — Inverse-solver demo converges ⏳ (manual visual gate, code shipped 2026-05-02)
-`archiv/tri_leg_inverse.py` is the demo: three legs, three goals, `QPInverseProblemSolver`. Automated regression in `test/test_observer/test_inverse_authoring.py` asserts no convergence stall + no QP infeasibility over 80 steps. The visual gate is the user opening the rendered PNG and confirming each leg tip is visibly near its goal target.
+### M6 — Inverse-solver demo converges ✅ (passed 2026-05-02)
+`archiv/tri_leg_inverse.py`: three legs, three goals, `QPInverseProblemSolver`. Automated regression in `test/test_observer/test_inverse_authoring.py` asserts no convergence stall + no QP infeasibility over 80 steps. User confirmed `/tmp/tri_leg_inverse.png` shows each leg tip at its goal.
 
 (M1, M2 passed — see `docs/progress.md`.)
 
@@ -166,7 +163,7 @@ End-state check that proves the whole plan worked. Items 1–6 are the portfolio
 
 ## Effort estimate (remaining work)
 
-- Phase 6.1 M5 manual gate: ~30 min user time — run Claude against 4 fixtures, grade per checklist. Code half is shipped.
+- Phase 6.1 M5 gate: ✅ passed 2026-05-02 via dogfooding.
 - Phase 6.3 remaining: ~half a day total for #3 + #6 + #7 (VTK reader, deprecated/meta plugin handling, MCP registration docs — all low severity).
 - Phase 3: ~half a day
 - Phase 6.2: ~1 day

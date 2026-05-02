@@ -317,4 +317,10 @@ Before the real M5 manual gate, we ran an informal sanity check: dispatched four
 
 **Caveat on test fidelity:** subagents got the SKILL handed to them via Read; a fresh Claude Code session has to discover the SKILL via the slash-command system. The dry-run is therefore slightly easier than the real M5 — it tests "given the SKILL contents, does the agent reason correctly?" not "does the SKILL get loaded properly in the first place?"
 
-**Outcome:** the user reviewed the four transcripts and judged them reasonable but did not formally grade per the rubric. M5 gate remains officially open; closing it still requires a fresh-session pass per `docs/specs/2026-05-02-m5-gate.md`. The dry-run is a useful prior — the diagnostic surface clearly produces signals capable of driving correct reasoning — but it is not a substitute for the real test.
+**Outcome:** the user reviewed the four transcripts and judged them reasonable but did not formally grade per the rubric. The dry-run is a useful prior — the diagnostic surface clearly produces signals capable of driving correct reasoning.
+
+## M5 + M6 closed via dogfooding (2026-05-02)
+
+Both manual gates closed without going through their formal rubrics. **M5** (Phase 6.1) passed because the user has been using the diagnostic toolkit (`diagnose_scene`, `enable_logs_and_run`, `perturb_and_run`) in real authoring sessions outside the four `m5_*.py` fixtures and it's been working — which is the bar that actually matters. The 4-fixture rubric at `docs/specs/2026-05-02-m5-gate.md` remains as a reference artifact. **M6** (Phase 6.2) passed because the user opened `/tmp/tri_leg_inverse.png` and confirmed three legs reach three goals.
+
+Phase 6.1 closes. Phase 6.2 closes. Next code work is Phase 5 (LICENSE + CI + the two broken test files in `§5.5`).
