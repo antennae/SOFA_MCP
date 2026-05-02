@@ -115,7 +115,9 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 
 ## Suggested execution order
 
-**6.1 Step 5 (default next — closes M5 gate)** → 6.3 #8 (render geometry, the remaining medium-high friction) → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups) → 4 (README rewrite, last so it can showcase everything that actually works).
+**M5 manual gate (user-driven, blocks Phase 6.1 close)** in parallel with **6.3 #8 (render geometry, default next code work)** → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups) → 4 (README rewrite, last so it can showcase everything that actually works).
+
+The M5 gate is the user running Claude against the four fixtures at `test/test_observer/fixtures/m5_*.py` and grading per `docs/specs/2026-05-02-m5-gate.md` — strict 3-criterion-per-fixture rubric. Until M5 passes, Phase 6.1 stays officially open even though all the code shipped.
 
 If energy is constrained: ship Phases 1–5 as v0.1 (portfolio-ready), sit on it, decide whether Phase 6.2 is worth the investment based on whether anyone actually finds and uses v0.1.
 
@@ -163,7 +165,7 @@ End-state check that proves the whole plan worked:
 
 ## Effort estimate (remaining work)
 
-- Phase 6.1 Step 5 (M5 gate): ~half a day — 4 fixture scenes + E2E pytest + manual M5 checklist.
+- Phase 6.1 M5 manual gate: ~30 min user time — run Claude against 4 fixtures, grade per checklist. Code half is shipped.
 - Phase 6.3 remaining: ~half a day for #8 (render geometry, medium-high), ~half a day for #3 + #6 + #7 (VTK reader, deprecated/meta plugin handling, MCP registration docs — all low severity).
 - Phase 3: ~half a day
 - Phase 6.2: ~1 day
