@@ -234,7 +234,7 @@ def perturb_and_run(
     )
 
 
-if __name__ == "__main__":
+def main() -> None:
     from sofa_mcp.architect.plugin_cache import generate_and_save_plugin_map
     generate_and_save_plugin_map()
     port = int(os.environ.get("SOFA_MCP_PORT", "8000"))
@@ -246,3 +246,7 @@ if __name__ == "__main__":
         stateless_http=True,
         json_response=True,
     )
+
+
+if __name__ == "__main__":
+    main()

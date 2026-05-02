@@ -2,13 +2,28 @@
 name = "sofa-mcp"
 version = "0.1.0"
 description = "A sim-to-real MCP for SOFA."
-authors = ["Your Name <you@example.com>"]
+authors = ["Tian Sizhe <sizhe.tian@inria.fr>"]
+license = "MIT"
+readme = "README.md"
+packages = [{ include = "sofa_mcp" }]
+
+# SOFA runtime is NOT installed via pip. Built and tested against SOFA
+# Framework v24.12 with SofaPython3 + SoftRobots + SoftRobots.Inverse
+# plugins. Set SOFA_ROOT to the SOFA install root and ensure the venv at
+# ~/venv/bin/python has SofaPython3 importable (PYTHONPATH).
 
 [tool.poetry.dependencies]
 python = "^3.10"
 trimesh = "^3.23.5"
-fastmcp = "^0.1.0"
+fastmcp = "^3.0"
 gmsh = "*"
 pymeshlab = "*"
 scipy = "*"
 pyvista = "*"
+
+[tool.poetry.scripts]
+sofa-mcp = "sofa_mcp.server:main"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
