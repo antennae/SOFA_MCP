@@ -31,7 +31,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 | 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3, 4 done; Step 5 automated half done 2026-05-02; M5 manual gate awaiting user verification per docs/specs/2026-05-02-m5-gate.md |
 | 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5 shipped (2026-04-30 / 2026-05-02); 4 of 8 still pending |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
-| 3 — Wrap the install (Dockerfile) | ⏳ pending | M3 gate |
+| 3 — Wrap the install (Dockerfile) | ⏳ deferred | M3 gate; deprioritized 2026-05-02 — beginner-install ergonomics, not portfolio-critical |
 | 6.2 — Inverse-problem solver | ⏳ pending | M6 gate |
 | 5 — Open the door (LICENSE, CI, etc.) | ⏳ pending | minimum CI viability still needs the test fixes from §5.5 |
 
@@ -115,11 +115,13 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 
 ## Suggested execution order
 
-**M5 manual gate (user-driven, blocks Phase 6.1 close)** in parallel with **6.3 #8 (render geometry, default next code work)** → 3 (Docker) → 6.2 (inverse) → 5 (door + test fixes) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups) → 4 (README rewrite, last so it can showcase everything that actually works).
+Portfolio-first ordering (2026-05-02): the project is primarily a portfolio piece, secondarily a beginner-friendly tool. That moves visible artifacts (renders, headline demo, README) ahead of install ergonomics (Docker).
+
+**M5 manual gate (user-driven, blocks Phase 6.1 close)** in parallel with **6.3 #8 (render mesh geometry, default next code work — biggest visual win for screenshots)** → 6.2 (inverse-problem solver, the headline demo) → 5 (LICENSE + fix two broken test files) → 4 (README rewrite — the actual portfolio artifact, last so it can showcase #8 and #6.2) → 3 (Docker, deferred — beginner-install ergonomics, not portfolio) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups).
 
 The M5 gate is the user running Claude against the four fixtures at `test/test_observer/fixtures/m5_*.py` and grading per `docs/specs/2026-05-02-m5-gate.md` — strict 3-criterion-per-fixture rubric. Until M5 passes, Phase 6.1 stays officially open even though all the code shipped.
 
-If energy is constrained: ship Phases 1–5 as v0.1 (portfolio-ready), sit on it, decide whether Phase 6.2 is worth the investment based on whether anyone actually finds and uses v0.1.
+If energy is constrained: ship 6.3 #8 + 6.2 + Phase 5 + Phase 4 as v0.1 (portfolio-ready). Docker and the low-severity 6.3 items can wait until someone actually wants to run it locally without building SOFA from source.
 
 ---
 
@@ -149,17 +151,16 @@ For **6.1 Steps 4–5, Phases 3, 5, 6.2, 4** — see the spec at `docs/specs/202
 
 ## Verification (end-to-end)
 
-End-state check that proves the whole plan worked:
+End-state check that proves the whole plan worked. Items 1–6 are the portfolio-ready v0.1 bar; items 7–8 are the beginner-install bar (deferred).
 
-1. `docker build -t sofa-mcp .` succeeds on a fresh machine in <45 minutes.
-2. `docker run -p 8000:8000 sofa-mcp` exposes the MCP server on `http://127.0.0.1:8000/mcp` within 60 seconds.
-3. `validate_scene` on `tri_leg_cables.py` succeeds.
-4. `render_scene_snapshot` produces a PNG showing three-leg deformation.
-5. `diagnose_scene` on a deliberately broken scene names the right anomaly + suggests a concrete fix.
-6. `run_inverse_problem` on a tri-leg variant + target reaches target within tolerance.
-7. `pytest test/` exits 0 (after Phase 5 test fixes).
-8. README cold-read passes M4.
-9. `tools/list` returns ~21 tools, all of which appear somewhere in README or SKILL workflow.
+1. `validate_scene` on `tri_leg_cables.py` succeeds.
+2. `render_scene_snapshot` produces a PNG showing three-leg deformation with real surface mesh (not a convex hull).
+3. `diagnose_scene` on a deliberately broken scene names the right anomaly + suggests a concrete fix.
+4. `run_inverse_problem` on a tri-leg variant + target reaches target within tolerance; final-frame render shows the robot at the target.
+5. `pytest test/` exits 0 (after Phase 5 test fixes).
+6. README cold-read passes M4; `tools/list` returns ~21 tools, all of which appear somewhere in README or SKILL workflow.
+7. `docker build -t sofa-mcp .` succeeds on a fresh machine in <45 minutes.
+8. `docker run -p 8000:8000 sofa-mcp` exposes the MCP server on `http://127.0.0.1:8000/mcp` within 60 seconds.
 
 ---
 
