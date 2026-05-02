@@ -310,3 +310,11 @@ Closed the "headline demo" deliverable without adding a new MCP tool. The existi
 **Why no MCP tool:** a `run_inverse_problem` wrapper would have been thin — same scene-load + animate path as `validate_scene`, with no inverse-specific capability the diagnostic surface didn't already provide. Confirmed as over-engineering on 2026-05-02.
 
 **Spec deviation from the original plan:** the original `docs/plan.md` Phase 6.2 listed "Add `run_inverse_problem` MCP tool" as the deliverable. The 2026-05-02 portfolio-first reordering reframed M6 as "the agent authors and runs inverse scenes correctly using existing tools" — which closes the same milestone with strictly less code and zero new public surface.
+
+## M5 subagent dry-run (informal pre-check, 2026-05-02)
+
+Before the real M5 manual gate, we ran an informal sanity check: dispatched four general-purpose subagents in parallel, one per `m5_*.py` fixture. Each subagent was told to read `SKILL.md` from the file path, debug the scene via `diagnose_scene` + probes (called as Python imports — no MCP server), and explain its full reasoning chain. Results from each subagent are in the conversation history.
+
+**Caveat on test fidelity:** subagents got the SKILL handed to them via Read; a fresh Claude Code session has to discover the SKILL via the slash-command system. The dry-run is therefore slightly easier than the real M5 — it tests "given the SKILL contents, does the agent reason correctly?" not "does the SKILL get loaded properly in the first place?"
+
+**Outcome:** the user reviewed the four transcripts and judged them reasonable but did not formally grade per the rubric. M5 gate remains officially open; closing it still requires a fresh-session pass per `docs/specs/2026-05-02-m5-gate.md`. The dry-run is a useful prior — the diagnostic surface clearly produces signals capable of driving correct reasoning — but it is not a substitute for the real test.
