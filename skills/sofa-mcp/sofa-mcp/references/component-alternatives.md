@@ -147,11 +147,25 @@ Loading `RequiredPlugin BulletCollisionDetection` provides its own broad+narrow 
 
 ## Inverse-problem components (`SoftRobots.Inverse` plugin)
 
-Any of these classes in a scene requires `QPInverseProblemSolver` at root.
+Any class from this plugin in a scene requires `QPInverseProblemSolver` at root (Rule 5B detects this by plugin attribution, not class-name list).
 
-- **Actuators**: `CableActuator`, `SurfacePressureActuator`, `ForcePointActuator`, `ForceSurfaceActuator`, `JointActuator`, `SlidingActuator`, `SlidingForceActuator`, `SmoothSlidingForceActuator`, `SphericalSlidingForceActuator`, `AreaContactSlidingForceActuator`, `ForceLocalizationActuator`, `YoungModulusActuator`
-- **Effectors**: `BarycentricCenterEffector`, `CableEffector`, `PositionEffector`, `SurfacePressureEffector`, `SurfaceSlidingEffector`, `VolumeEffector`
-- **Equalities**: `CableEquality`, `PositionEquality`, `SurfacePressureEquality`
-- **Sensors**: `CableSensor`, `SurfacePressureSensor`, `SurfaceSlidingSensor`
+**Forward → inverse pair table.** When converting a forward scene to inverse, swap each forward constraint for one of these:
+
+| Forward (`SoftRobots`) | Inverse counterparts (`SoftRobots.Inverse`) |
+|---|---|
+| `CableConstraint` | `CableActuator` (drive) / `CableEffector` (track) / `CableEquality` (lock) / `CableSensor` (read) |
+| `JointConstraint` | `JointActuator` |
+| `PositionConstraint` | `PositionEffector` (track) / `PositionEquality` (lock) |
+| `SurfacePressureConstraint` | `SurfacePressureActuator` / `SurfacePressureEquality` / `SurfacePressureSensor` |
+| `UnilateralPlaneConstraint` | *(no inverse counterpart — keep as forward; mixing is fine)* |
+| `PartialRigidificationConstraint` | *(no inverse counterpart — keep as forward; mixing is fine)* |
+
+**Inverse-only components** (no forward analog — pick by goal shape via `search_sofa_components('Effector')` / `('Actuator')`):
+- Force-driven: `ForcePointActuator`, `ForceSurfaceActuator`
+- Geometry-driven: `BarycentricCenterEffector`, `VolumeEffector`
+- Sliding: `SlidingActuator`
+- Parameter identification: `YoungModulusActuator` (solves for material, not motion)
+
+**Solver:** `QPInverseProblemSolver` (root-level; required).
 
 `CosseratActuatorConstraint` is in the `Cosserat` plugin (not `SoftRobots.Inverse`) — forward-compatible, does NOT require `QPInverseProblemSolver`.

@@ -292,3 +292,21 @@ Cable subnodes (sparse MOs with no surface) are filtered naturally: they're not 
 **Tests:** `test/test_observer/test_renderer.py` — asserts `tri_leg_cables` renders exactly 3 visual models (one per leg, cables excluded), and a topology-only fixture (`render_no_visual_fallback.py`) renders without hull or crash. Total adjacent-suite count: 82 passed.
 
 **SKILL.md:** added a one-liner pointing agents at OglModel as the renderer's primary input.
+
+## Phase 6.2 — Inverse-problem authoring (no new tool) ✅ partial (2026-05-02)
+
+Closed the "headline demo" deliverable without adding a new MCP tool. The existing toolkit (`validate_scene`, `diagnose_scene`, `render_scene_snapshot`, plus Rule 5B + the `inverse_objective_not_decreasing` and `qp_infeasible_in_log` smell tests) already handled the inverse case end-to-end; what was missing was *authoring guidance* and a working example.
+
+**Three artifacts shipped:**
+
+1. **`archiv/tri_leg_inverse.py`** — three cable-actuated legs solving an inverse-position problem. Each leg has a `CableActuator` (replaces the forward `CableConstraint`) and a `PositionEffector` whose goal is a per-leg `MechanicalObject` placed asymmetrically (inward offsets 25/18/12 mm). `QPInverseProblemSolver` at root finds the cable forces that move each tip toward its goal. Visually informative because the three legs deform to three different amounts. Goal subnodes follow the canonical SOFA pattern (`EulerImplicitSolver(firstOrder=True)` + `CGLinearSolver` + `UncoupledConstraintCorrection`) so Rule 3 doesn't fire on their unmapped MOs.
+
+2. **SKILL.md "Workflow: authoring inverse-problem scenes" section** — the four-switch recipe (plugin, solver, constraints→actuators, effector+goal). Points the agent at `search_sofa_components('Effector')` for picking the right effector by goal shape, not from a hardcoded list (principle over enumeration).
+
+3. **`references/component-alternatives.md`** — replaced the flat 25-class enumeration with a targeted forward↔inverse pair table (6 forward constraints with their inverse counterparts) plus a callout of the inverse-only components (force, volume, parameter-identification). Dropped 9 components per user pruning (SurfaceSlidingConstraint et al.).
+
+**Tests:** `test/test_observer/test_inverse_authoring.py` — `validate_scene` clean; `diagnose_scene(steps=80)` reports no `inverse_objective_not_decreasing` and no `qp_infeasible_in_log`. Visual M6 sign-off is manual.
+
+**Why no MCP tool:** a `run_inverse_problem` wrapper would have been thin — same scene-load + animate path as `validate_scene`, with no inverse-specific capability the diagnostic surface didn't already provide. Confirmed as over-engineering on 2026-05-02.
+
+**Spec deviation from the original plan:** the original `docs/plan.md` Phase 6.2 listed "Add `run_inverse_problem` MCP tool" as the deliverable. The 2026-05-02 portfolio-first reordering reframed M6 as "the agent authors and runs inverse scenes correctly using existing tools" — which closes the same milestone with strictly less code and zero new public surface.

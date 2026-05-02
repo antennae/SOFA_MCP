@@ -32,7 +32,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 | 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5, #8 shipped (2026-04-30 / 2026-05-02); 3 of 8 still pending (low-severity #3, #6, #7) |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ deferred | M3 gate; deprioritized 2026-05-02 — beginner-install ergonomics, not portfolio-critical |
-| 6.2 — Inverse-problem solver | ⏳ pending | M6 gate |
+| 6.2 — Inverse-problem authoring (no new tool) | 🚧 partial | code+docs shipped 2026-05-02 (tri_leg_inverse.py + SKILL section + references); M6 manual visual gate awaiting user verification |
 | 5 — Open the door (LICENSE, CI, etc.) | ⏳ pending | minimum CI viability still needs the test fixes from §5.5 |
 
 ---
@@ -117,7 +117,7 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 
 Portfolio-first ordering (2026-05-02): the project is primarily a portfolio piece, secondarily a beginner-friendly tool. That moves visible artifacts (renders, headline demo, README) ahead of install ergonomics (Docker).
 
-**M5 manual gate (user-driven, blocks Phase 6.1 close)** in parallel with **6.2 (inverse-problem solver, the headline demo and default next code work)** → 5 (LICENSE + fix two broken test files) → 4 (README rewrite — the actual portfolio artifact, last so it can showcase #8 + #6.2) → 3 (Docker, deferred — beginner-install ergonomics, not portfolio) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups).
+**M5 manual gate (user-driven, blocks Phase 6.1 close)** ∥ **M6 manual visual gate (open `/tmp/tri_leg_inverse.png` and confirm three legs reach three goals; closes Phase 6.2)** → 5 (LICENSE + fix two broken test files) → 4 (README rewrite — the actual portfolio artifact, last so it can showcase #8 + 6.2's tri-leg demo) → 3 (Docker, deferred — beginner-install ergonomics, not portfolio) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups).
 
 The M5 gate is the user running Claude against the four fixtures at `test/test_observer/fixtures/m5_*.py` and grading per `docs/specs/2026-05-02-m5-gate.md` — strict 3-criterion-per-fixture rubric. Until M5 passes, Phase 6.1 stays officially open even though all the code shipped.
 
@@ -136,8 +136,8 @@ A non-SOFA reader answers "what is this for / who is it for / how do I run it / 
 ### M5 — Diagnose toolkit *finds real bugs* ⏳ (manual checklist drafted, awaiting user verification)
 Four fixtures + grading rubric live at `docs/specs/2026-05-02-m5-gate.md`. Bar: every fixture clears all three binary criteria (right anomaly read, plausible hypothesis, right probe call). Strict — partial credit doesn't pass.
 
-### M6 — Inverse-solver demo converges ⏳ (after 6.2)
-Tri-leg variant with a target effector position. Solver converges in <200 steps. Final-frame render shows the robot reaching the target.
+### M6 — Inverse-solver demo converges ⏳ (manual visual gate, code shipped 2026-05-02)
+`archiv/tri_leg_inverse.py` is the demo: three legs, three goals, `QPInverseProblemSolver`. Automated regression in `test/test_observer/test_inverse_authoring.py` asserts no convergence stall + no QP infeasibility over 80 steps. The visual gate is the user opening the rendered PNG and confirming each leg tip is visibly near its goal target.
 
 (M1, M2 passed — see `docs/progress.md`.)
 

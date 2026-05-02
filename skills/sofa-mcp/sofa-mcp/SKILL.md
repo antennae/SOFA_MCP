@@ -39,6 +39,19 @@ The loop is: **symptom → sanity report → run + measure → hypothesis → mo
 
 For the full investigative procedure, the symptom-to-hypothesis table, and a worked example, read `references/debugging-playbook.md`.
 
+## Workflow: authoring inverse-problem scenes
+
+When the user wants the simulation to *find* the actuation that achieves a goal — "make the tip touch this point," "set this volume," "match this force" — author an inverse-problem scene. The agent flips four switches relative to a forward scene:
+
+1. **Plugin.** Add `RequiredPlugin name="SoftRobots.Inverse"`.
+2. **Solver.** Use `QPInverseProblemSolver` at root in place of `NNCGConstraintSolver`.
+3. **Constraints → actuators.** Replace each forward `*Constraint` with the inverse `*Actuator` from `SoftRobots.Inverse`. Pair table in `references/component-alternatives.md`.
+4. **Effector + goal.** Add an effector matching the goal type (position, volume, force, etc.). Pick the right effector via `search_sofa_components('Effector')` — choose by goal shape, not from a list. Pair the effector with a separate `goal` subnode that holds a `MechanicalObject` at the target. Wire via `effectorGoal="@../../goal_i/goalMO.position"` (or analogous). The goal subnode itself needs a solver chain (`EulerImplicitSolver(firstOrder=True)` + `CGLinearSolver` + `UncoupledConstraintCorrection`) to satisfy Rule 3 — its MO is unmapped.
+
+Validation: `validate_scene` will surface authoring errors via Rule 5B (any `SoftRobots.Inverse` class without a root-level `QPInverseProblemSolver` is an error). Convergence: run `diagnose_scene(scene, steps=N)` — the `inverse_objective_not_decreasing` smell test reads `QPInverseProblemSolver.objective` per step and warns if the tail stalls; `qp_infeasible_in_log` catches actuator force-bound contradictions. Visual sanity: render with `render_scene_snapshot` to see the deformed body at the goal.
+
+Worked example: `archiv/tri_leg_inverse.py` — three cable-actuated legs reaching three position targets.
+
 ## Scene Health Rules (The Architect's Checklist)
 
 Agent-facing summary of what makes a SOFA scene physically well-formed. When the recommended class doesn't fit, look up alternatives in `references/component-alternatives.md` (organized by category) or call `search_sofa_components('keyword')` for live discovery.
