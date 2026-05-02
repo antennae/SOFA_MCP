@@ -33,7 +33,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ deferred | M3 gate; deprioritized 2026-05-02 — beginner-install ergonomics, not portfolio-critical |
 | 6.2 — Inverse-problem authoring (no new tool) | ✅ done | code+docs shipped 2026-05-02 (tri_leg_inverse.py + SKILL section + references); M6 passed 2026-05-02 — user confirmed render shows three legs reaching three goals |
-| 5 — Open the door (LICENSE, CI, etc.) | ⏳ pending | minimum CI viability still needs the test fixes from §5.5 |
+| 5 — Open the door (LICENSE, CI, etc.) | 🚧 partial | test hygiene shipped 2026-05-02 — `pytest test/` now 113/113 green (was 7 pre-existing failures). LICENSE / CONTRIBUTING / issue template / pyproject polish still pending. CI deferred (would need SOFA-built runner). |
 
 ---
 
@@ -82,12 +82,12 @@ This is the second README demo — "give a target effector position, watch the r
 
 ### Phase 5 — Open the door (no maintenance commitment)
 
-- LICENSE — MIT.
-- CONTRIBUTING.md — five lines, no SLA.
-- `.github/ISSUE_TEMPLATE/bug.md` — minimal (SOFA version, OS, traceback, repro).
-- `pyproject.toml` — top-of-file SOFA version comment.
-- **Fix two breaking test files**: `test_observer/test_stepping.py` (`sample_data` → `data_preview`) and `test_architect/test_scene_writer.py` (`add_scene_content` contract drift — recommend rewriting as one happy-path integration test against `tri_leg_cables.py`). Until this lands, `pytest test/` shows 7 pre-existing failures unrelated to recent work.
-- `.github/workflows/test.yml` — minimal CI; optional.
+- LICENSE — MIT. ⏳
+- CONTRIBUTING.md — five lines, no SLA. ⏳
+- `.github/ISSUE_TEMPLATE/bug.md` — minimal (SOFA version, OS, traceback, repro). ⏳
+- `pyproject.toml` — author placeholder + top-of-file SOFA version comment. ⏳
+- ✅ **Fixed three breaking test files** (2026-05-02): `test_observer/test_stepping.py` (`sample_data` → `data_preview` rename, 3 sites); `test_architect/test_scene_writer.py` (full rewrite around the `createScene(rootNode)` contract — single `MINIMAL_SCENE` constant, `checks` assertion updated to the `rule_*_*` slug schema introduced in Step 1.5); `test_architect/test_component_query.py::test_search_sofa_components_unavailable` (search path moved from live factory to `plugin_cache.load_plugin_map` — repointed mocks to the new path). `pytest test/` is now 113/113 green.
+- `.github/workflows/test.yml` — minimal CI. **Skipped** — would need a runner with SOFA v24.12 + SoftRobots + SoftRobots.Inverse + SofaPython3 built from source (~10 min build per CI run). Not portfolio-critical; revisit if/when there's an upstream SOFA Docker image we can lean on.
 
 ### Phase 4 — README rewrite
 

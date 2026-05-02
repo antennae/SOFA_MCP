@@ -324,3 +324,15 @@ Before the real M5 manual gate, we ran an informal sanity check: dispatched four
 Both manual gates closed without going through their formal rubrics. **M5** (Phase 6.1) passed because the user has been using the diagnostic toolkit (`diagnose_scene`, `enable_logs_and_run`, `perturb_and_run`) in real authoring sessions outside the four `m5_*.py` fixtures and it's been working — which is the bar that actually matters. The 4-fixture rubric at `docs/specs/2026-05-02-m5-gate.md` remains as a reference artifact. **M6** (Phase 6.2) passed because the user opened `/tmp/tri_leg_inverse.png` and confirmed three legs reach three goals.
 
 Phase 6.1 closes. Phase 6.2 closes. Next code work is Phase 5 (LICENSE + CI + the two broken test files in `§5.5`).
+
+## Phase 5 — Test hygiene ✅ partial (2026-05-02)
+
+Cleared the seven pre-existing failures so `pytest test/` is green for the first time. Three test files were stale relative to production-code drift; production behavior was correct, the tests were chasing yesterday's contract.
+
+- **`test/test_observer/test_stepping.py`** — `run_and_extract` renamed its result key `sample_data` → `data_preview` at some point. Three assertion sites updated.
+- **`test/test_architect/test_scene_writer.py`** — full rewrite. The old contract took `def add_scene_content(rootNode):` and the writer auto-renamed it to `createScene`; the current contract requires `def createScene(rootNode):` directly (per `_build_scene_source` in `sofa_mcp/architect/scene_writer.py:30`). Six tests were exercising the dead path. Rewrote with a single shared `MINIMAL_SCENE` constant. Also re-keyed the `summarize_scene` checks assertion: shape moved from `{"name": "has_mechanical_object", ...}` to `{"rule": "rule_1_plugins", "severity": "ok", ...}` when Step 1.5 wired the Health Rules into the runtime evaluator (Phase 6.1 Step 1.5). Test now asserts the nine `rule_*` slugs are all present.
+- **`test/test_architect/test_component_query.py::test_search_sofa_components_unavailable`** — `search_sofa_components` migrated from the live SOFA factory to `plugin_cache.load_plugin_map()` as the primary lookup, with the live factory only as a fallback. The old test mocked `Sofa.Core.ObjectFactory` to return an empty class list, but that mock no longer intercepts the real path. Repointed to `patch('sofa_mcp.architect.plugin_cache.load_plugin_map')` + the live-factory fallback. Note: the `from . import plugin_cache` inside the function means the canonical-source path is what unittest.mock can resolve — patching `sofa_mcp.architect.component_query.plugin_cache.X` raises AttributeError because the local import never lives at module scope.
+
+**Outcome:** `~/venv/bin/python -m pytest test/` → `113 passed in 59.61s`. No production-code changes; this was pure test maintenance.
+
+**Still pending in Phase 5:** LICENSE (MIT), CONTRIBUTING.md, `.github/ISSUE_TEMPLATE/bug.md`, `pyproject.toml` author/SOFA-version comment. CI workflow skipped — would require a SOFA-built runner image (~10 min per CI run), out of scope for portfolio v0.1.
