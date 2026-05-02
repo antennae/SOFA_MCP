@@ -2,9 +2,7 @@
 
 > An MCP server that bridges LLM agents with the [SOFA](https://www.sofa-framework.org/) physics simulation framework.
 
-<!-- TODO: hero demo video (target: trimmed mp4 from mcp_demo/d-4.webm, embedded with <video> tag) -->
-
-The server exposes SOFA's component registry, scene validation, STL→volumetric meshing, simulation stepping, and headless rendering as MCP tools, so an LLM agent can author and verify scenes directly from natural-language prompts. 
+The server exposes SOFA's component registry, scene validation, STL→volumetric meshing, simulation stepping, and headless rendering as MCP tools, so an LLM agent can author and verify scenes directly from natural-language prompts.
 
 ## Quick start
 
@@ -13,23 +11,23 @@ The server exposes SOFA's component registry, scene validation, STL→volumetric
 - SOFA Framework built with `SofaPython3`, `SoftRobots`, and `SoftRobots.Inverse`. `SOFA_ROOT` set to the install dir; `PYTHONPATH` includes `$SOFA_ROOT/plugins/SofaPython3/lib/python3/site-packages`.
 - Python 3.10+ in a venv.
 
-### Install Python deps
+### Install
 
 ```bash
-poetry install
-# or
-~/venv/bin/pip install fastmcp trimesh gmsh pymeshlab scipy pyvista
+~/venv/bin/pip install .
 ```
+
+Pulls `fastmcp`, `trimesh`, `gmsh`, `pymeshlab`, `scipy`, and `pyvista`. SOFA itself is not installed via pip — bring your own SOFA build (see Prerequisites).
 
 ### Run the server
 
 ```bash
 ~/venv/bin/python sofa_mcp/server.py
+# or, after pip install:
+sofa-mcp
 ```
 
 The server listens on `http://127.0.0.1:8000/mcp` (streamable HTTP, JSON-RPC 2.0). On first launch it scans `$SOFA_ROOT/lib` to build the plugin → component cache (`.sofa_mcp_results/.sofa-component-plugin-map.json`); this takes ~30 seconds and only happens once.
-
-> A `Dockerfile` packaging the entire SOFA build + plugins is in progress. Until it lands, the native install above is the supported path.
 
 ## Worked example: tri-leg cable robot
 
@@ -43,10 +41,10 @@ The agent goes through roughly these tool calls:
 2. **`get_plugins_for_components`** to resolve their required plugins in one batch.
 3. The agent writes the `createScene(root)` body, gathering all `RequiredPlugin` calls at the top.
 4. **`validate_scene`** confirms the scene initializes and animates one step.
-5. **`write_scene`** saves it to [`tri_leg_cables.py`](./tri_leg_cables.py).
+5. **`write_scene`** saves it to [`archiv/tri_leg_cables.py`](./archiv/tri_leg_cables.py).
 6. **`render_scene_snapshot`** runs the simulation for 150 steps and renders the final state:
 
-![Three colored legs bending asymmetrically toward a common point](assets/tri_leg_cables_snapshot.png)
+![Three colored legs bending asymmetrically toward a common point](archiv/assets/tri_leg_cables_snapshot.png)
 
 The cables in the rendered scene contract by 22mm, 12mm, and 5mm — asymmetric values added by hand after the agent's initial draft, to make the deformation visually clear. Each leg's color comes from its `OglModel`; the renderer auto-discovers every `MechanicalObject` and pulls colors from sibling visual nodes.
 
@@ -58,9 +56,10 @@ The cables in the rendered scene contract by 22mm, 12mm, and 5mm — asymmetric 
 | Component lookup | `query_sofa_component`, `search_sofa_components`, `get_plugins_for_components` | Find components in the registry; resolve their plugins |
 | Mesh | `mesh_stats`, `find_indices_by_region`, `resolve_asset_path`, `generate_volume_mesh` | Inspect meshes; convert STL surfaces to volumetric VTK via gmsh |
 | Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `render_scene_snapshot` | Run scenes, extract data, render final-frame snapshots |
+| Diagnostics | `diagnose_scene`, `enable_logs_and_run`, `perturb_and_run` | Smell-test a scene over N steps (NaN, divergence, QP infeasibility, ...); capture component logs; perturb a Data field and re-run to test a hypothesis |
 | Misc | `health_check` | Server liveness |
 
-18 tools total. Full schemas are exposed via MCP `tools/list`; per-tool documentation lives in [`skills/sofa-mcp/sofa-mcp/SKILL.md`](skills/sofa-mcp/sofa-mcp/SKILL.md).
+21 tools total. Full schemas are exposed via MCP `tools/list`; per-tool documentation lives in [`skills/sofa-mcp/sofa-mcp/SKILL.md`](skills/sofa-mcp/sofa-mcp/SKILL.md).
 
 ## Architecture
 
