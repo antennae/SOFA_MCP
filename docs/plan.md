@@ -28,7 +28,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 
 | Phase | Status | Notes |
 |---|---|---|
-| 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3, 4 (high-leverage pair) done (see progress.md); Step 5 (M5 gate) pending |
+| 6.1 — Investigative debugging toolkit | 🚧 in progress | Steps 1, 1.5, 2, 3, 4 done; Step 5 automated half done 2026-05-02; M5 manual gate awaiting user verification per docs/specs/2026-05-02-m5-gate.md |
 | 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5 shipped (2026-04-30 / 2026-05-02); 4 of 8 still pending |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ pending | M3 gate |
@@ -53,9 +53,19 @@ Shipped — see `docs/progress.md` Step 3 entry. 6 rules + printLog activation +
 
 High-leverage pair shipped: `enable_logs_and_run` + `perturb_and_run` (see progress.md). The two deferred probes — `compare_scenes` (~200 LOC, two-scene runtime diff) and `scan_init_stdout` (~50 LOC, init-only precheck) — are out of scope for now and get their own follow-up plan if M5 surfaces a need.
 
-### Step 5 — Playbook integration + tests + M5 gate ⏳ (NEEDS REVIEW)
+### Step 5 — E2E fixtures + M5 gate ✅ partial (2026-05-02)
 
-Wire probes + sanity report into a `diagnose_scene` tool; integration tests; M5 user gate (does the toolkit *find real bugs* in 3-4 deliberately-broken scenes?). Full spec §Step 5.
+Automated regression net shipped: four deliberately-broken fixtures
+in `test/test_observer/fixtures/m5_*.py` exercising Rule 7, Rule 8,
+Rule 9, and the no-anomaly data-driven path. Four E2E pytest cases
+in `test_diagnose_e2e.py` assert the right slug/severity/metric.
+
+**M5 milestone gate** (the LLM-in-the-loop test) is waiting on user
+verification per the structured checklist at
+`docs/specs/2026-05-02-m5-gate.md`. M5 passes when the user runs Claude
+against each fixture and grades all three binary criteria (right
+anomaly read, plausible hypothesis, right probe call) yes for every
+fixture.
 
 ---
 
@@ -119,8 +129,8 @@ On a fresh machine: `docker run -p 8000:8000 sofa-mcp` brings up the server; too
 ### M4 — README reads cold ⏳ (after Phase 4 draft)
 A non-SOFA reader answers "what is this for / who is it for / how do I run it / what does it produce" in <5 minutes.
 
-### M5 — Diagnose toolkit *finds real bugs* ⏳ (after 6.1)
-Feed 3-4 scenes with behavioral bugs (cables not actuated, wrong material modulus, missing collision pipeline, wrong mapping). The agent uses the new probes + sanity report to (a) flag the right anomaly, (b) propose a hypothesis a human SOFA dev would also propose, (c) verify by running the right follow-up probe. Bar: "junior SOFA dev with no help, not stochastic parrot."
+### M5 — Diagnose toolkit *finds real bugs* ⏳ (manual checklist drafted, awaiting user verification)
+Four fixtures + grading rubric live at `docs/specs/2026-05-02-m5-gate.md`. Bar: every fixture clears all three binary criteria (right anomaly read, plausible hypothesis, right probe call). Strict — partial credit doesn't pass.
 
 ### M6 — Inverse-solver demo converges ⏳ (after 6.2)
 Tri-leg variant with a target effector position. Solver converges in <200 steps. Final-frame render shows the robot reaching the target.

@@ -240,3 +240,39 @@ covering class-name targets, unmatched targets, default log
 compaction, youngModulus perturbation effect on
 `archiv/cantilever_beam.py`'s `HexahedronFEMForceField` (path
 `/root/beam/FEM`), and unmatched-path reporting.
+
+---
+
+## Phase 6.1 Step 5 — E2E fixtures + M5 gate (automated half) ✅ (2026-05-02)
+
+Four deliberately-broken fixtures in `test/test_observer/fixtures/`,
+plus an automated regression net in `test/test_observer/test_diagnose_e2e.py`:
+
+- **`m5_cables_unactuated.py`** — `tri_leg_cables` variant with
+  `CableConstraint(value=0)`. NO anomaly fires. Test asserts low
+  `max_displacement_per_mo` and that `perturb_and_run` with restored
+  value produces ≥3× larger displacement on the perturbed leg. Tests
+  the data-driven hypothesis path (the agent-reasoning part is
+  manual).
+- **`m5_units_mismatch.py`** — `gravity=[0,-9810,0]` (mm/g/s) with
+  `youngModulus=5e9` (SI-Pa scale). Rule 9 fires at warning.
+- **`m5_missing_collision.py`** — `TriangleCollisionModel` on a body
+  without the 5-cluster pipeline at root. Rule 8 fires at error.
+- **`m5_broken_mapping.py`** — `BarycentricMapping` in a child whose
+  parent has only a bare `MeshTopology` (no filename, no loader, no
+  shell FEM). Rule 7B fires at error.
+
+**Tests:** 4 new E2E cases in `test_diagnose_e2e.py`; 80 total green
+across `test_log_compact + test_diagnostics + test_summarize_rules +
+test_mcp_transport + test_probes + test_diagnose_e2e`.
+
+**M5 manual gate** at `docs/specs/2026-05-02-m5-gate.md` — strict
+grading: every fixture must clear three binary criteria (right
+anomaly read, plausible hypothesis, right probe call). Awaits user
+verification; once passed, M5 closes Phase 6.1.
+
+**Spec deviation:** v2.1 §Step 5's playbook table referenced smell
+tests we never shipped (`actuator_lambda_zero`, `child_only_motion`,
+etc.) and probes we deferred (`compare_scenes`). The fixtures here
+are derived from the actual diagnostic surface; the M5 doc explicitly
+supersedes the v2.1 fixture table.
