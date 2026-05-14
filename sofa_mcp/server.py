@@ -168,9 +168,16 @@ def search_sofa_components(query: str, limit: int = 50) -> dict:
 
 
 @mcp.tool()
-def get_plugins_for_components(component_names: list[str], context_components: list[dict] = None) -> dict[str, str]:
+def get_plugins_for_components(component_names: list[str], context_components: list[dict] = None) -> dict:
     """
     For a list of SOFA component names, returns a mapping to their required plugins.
+
+    Each value is either:
+      - a plugin-name string (component found in cache), or
+      - a dict `{plugin: null, renamed: True, hint, suggested_replacements}`
+        when the name is a retired class SOFA has since renamed
+        (e.g. `GenericConstraintSolver` → `BlockGaussSeidel...`), or
+      - the literal string `"Component not found in cache"` when truly unknown.
     """
     return component_query.get_plugins_for_components(component_names, context_components=context_components)
 

@@ -1,0 +1,8 @@
+{
+  "_comment": "Retired SOFA class names → modern replacements. Seeded from SOFA's own factory error messages observed during MCP sessions; add new entries as they are encountered (see docs/feedback_2026-05-14_pneunet_session.md issues 4-5). Keys are the retired class names; values are arrays of suggested replacements in priority order.",
+  "GenericConstraintSolver": [
+    "BlockGaussSeidelConstraintSolver",
+    "UnbuiltGaussSeidelConstraintSolver",
+    "NNCGConstraintSolver"
+  ]
+}

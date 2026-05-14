@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
+import json
 import os
 import re
 import types
@@ -12,6 +13,86 @@ from . import factory_utils
 
 _AUTO_IMPORTED_PLUGINS = False
 _MIN_COMPONENT_REGISTRY_SIZE = 50
+
+_RENAMES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "renames.json")
+_RENAMES_CACHE: Optional[Dict[str, List[str]]] = None
+
+
+def _load_renames() -> Dict[str, List[str]]:
+    """Load the retired→modern class map from `renames.json`.
+
+    Cached after first load. Entries starting with `_` (e.g. `_comment`) are
+    skipped so the file can carry documentation alongside data.
+    """
+    global _RENAMES_CACHE
+    if _RENAMES_CACHE is not None:
+        return _RENAMES_CACHE
+    out: Dict[str, List[str]] = {}
+    try:
+        with open(_RENAMES_PATH, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        for k, v in raw.items():
+            if k.startswith("_"):
+                continue
+            if isinstance(v, list):
+                out[k] = [str(x) for x in v]
+            elif isinstance(v, str):
+                out[k] = [v]
+    except (IOError, json.JSONDecodeError):
+        pass
+    _RENAMES_CACHE = out
+    return out
+
+
+_REPLACEMENT_BULLET_RE = re.compile(r"^\s*[-*]\s*([A-Z][A-Za-z0-9_]*)\b")
+
+
+def _parse_replacements_from_error(err_text: str) -> List[str]:
+    """Extract suggested replacements from a SOFA retired-component error.
+
+    SOFA emits messages like:
+
+        GenericConstraintSolver has been replaced since v25.12 by ...
+          - BlockGaussSeidelConstraintSolver (...)
+          - UnbuiltGaussSeidelConstraintSolver (...)
+          - NNCGConstraintSolver (...)
+
+    We pull the bulleted class names. Caller decides what to do with them."""
+    if not err_text or "replaced" not in err_text.lower():
+        return []
+    seen: List[str] = []
+    for line in err_text.splitlines():
+        m = _REPLACEMENT_BULLET_RE.match(line)
+        if m:
+            cand = m.group(1)
+            if cand not in seen:
+                seen.append(cand)
+    return seen
+
+
+def _is_registered_component(component_name: str) -> Tuple[bool, Optional[str]]:
+    """Return `(is_registered, plugin_or_None)`.
+
+    Checks the plugin-map cache first (fast, authoritative for known plugins),
+    then falls back to the live ObjectFactory listing. Used to distinguish
+    "name is a typo / plugin not loaded" from "name is real but the dummy
+    instantiation context isn't sufficient" — see
+    `docs/feedback_2026-05-14_query_component_context_bug.md`.
+    """
+    try:
+        from . import plugin_cache
+        plugin_map = plugin_cache.load_plugin_map()
+        if component_name in plugin_map:
+            return True, plugin_map[component_name]
+    except Exception:
+        pass
+    try:
+        live = _try_get_registered_component_names()
+        if component_name in live:
+            return True, None
+    except Exception:
+        pass
+    return False, None
 
 
 def _maybe_auto_import_component_plugins(core: Any) -> None:
@@ -155,10 +236,23 @@ def query_sofa_component(component_name: str, template: str = None, context_comp
                             # which will provide better diagnostics to the user.
                             pass
         else:
-            root.addObject("MechanicalObject", template="Vec3d", name="dummy_mstate")
-            # Add a few common topology containers
-            root.addObject("TetrahedronSetTopologyContainer", name="dummy_tet_topology")
-            root.addObject("TriangleSetTopologyContainer", name="dummy_tri_topology")
+            # Beefier default scaffold: enough geometry/topology that most
+            # SoftRobots constraints, mappings, and topology-dependent FFs
+            # can construct against it. Empty topology containers were not
+            # sufficient — `SurfacePressureConstraint` needs real triangles.
+            # See docs/feedback_2026-05-14_query_component_context_bug.md.
+            root.addObject(
+                "MechanicalObject",
+                template="Vec3d",
+                name="dummy_mstate",
+                position=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+            )
+            root.addObject("TetrahedronSetTopologyContainer",
+                           name="dummy_tet_topology",
+                           tetrahedra=[[0, 1, 2, 3]])
+            root.addObject("TriangleSetTopologyContainer",
+                           name="dummy_tri_topology",
+                           triangles=[[0, 1, 2], [0, 2, 3], [0, 3, 1], [1, 3, 2]])
         
         # We use a child node for the target component so it can definitely see 
         # siblings/parents for link resolution.
@@ -196,23 +290,56 @@ def query_sofa_component(component_name: str, template: str = None, context_comp
                     if not template:
                         res = try_create(child, component_name, template="Vec3d")
 
-        # If it still failed, return the error with hints
+        # If it still failed, return the error with hints + registry metadata.
         if res is None or isinstance(res, Exception):
             error_text = str(res) if res is not None else "Unknown error (addObject returned None)"
-            hints = []
-            if "mstate" in error_text.lower():
-                hints.append("This component requires a MechanicalObject (mstate) in its context.")
-            if "topology" in error_text.lower():
-                hints.append("This component requires a TopologyContainer (e.g. TetrahedronSetTopologyContainer).")
-            if "factory" in error_text.lower() and "plugin" not in error_text.lower():
-                hints.append("The component name might be misspelled or the plugin is not loaded.")
-            
-            return {
+
+            is_registered, plugin = _is_registered_component(component_name)
+            replacements = _parse_replacements_from_error(error_text)
+            renames_map = _load_renames()
+            if not replacements and component_name in renames_map:
+                replacements = list(renames_map[component_name])
+
+            hints: List[str] = []
+            if is_registered:
+                # The name IS in the registry — the old "misspelled or plugin
+                # not loaded" hint was misleading and pushed callers toward
+                # rewriting against a different API. Be explicit about what
+                # actually went wrong.
+                hints.append(
+                    f"{component_name} is registered (plugin: {plugin or 'unknown'}) but could not be "
+                    "instantiated in the dummy context. Try passing `context_components=` with a "
+                    "parent MechanicalObject + topology, or trust `search_sofa_components` for "
+                    "existence and use `write_and_test_scene` to surface field-level errors."
+                )
+            else:
+                if "mstate" in error_text.lower():
+                    hints.append("This component requires a MechanicalObject (mstate) in its context.")
+                if "topology" in error_text.lower():
+                    hints.append("This component requires a TopologyContainer (e.g. TetrahedronSetTopologyContainer).")
+                if "factory" in error_text.lower() and "plugin" not in error_text.lower():
+                    hints.append("The component name might be misspelled or the plugin is not loaded.")
+
+            if replacements:
+                hints.append(
+                    f"SOFA suggests replacements for `{component_name}`: {', '.join(replacements)}."
+                )
+
+            response: Dict[str, Any] = {
                 "error": f"Could not create an instance of {component_name} for inspection.",
                 "details": error_text,
                 "hints": hints,
-                "success": False
+                "success": False,
             }
+            if is_registered:
+                response["registry_metadata"] = {
+                    "class_name": component_name,
+                    "plugin": plugin,
+                    "registered": True,
+                }
+            if replacements:
+                response["suggested_replacements"] = replacements
+            return response
 
         component = res
         data_fields = {}
@@ -251,10 +378,31 @@ def query_sofa_component(component_name: str, template: str = None, context_comp
 
 
 
-def get_plugin_for_component(component_name: str, context_components: list[dict] = None) -> str:
+def _factory_query_for_rename(component_name: str) -> Optional[str]:
+    """Ask the live ObjectFactory to construct `component_name`; return the
+    error text (which often contains a "has been replaced since vX.Y by ..."
+    block for retired components) or None on success/unavailable factory."""
+    try:
+        node = Sofa.Core.Node("renameProbe")
+        node.addObject(component_name)
+        return None
+    except Exception as e:
+        return str(e)
+
+
+def get_plugin_for_component(component_name: str, context_components: list[dict] = None):
     """
     Finds the required SOFA plugin for a single component name using the generated cache.
-    It ensures the cache is generated on the first run.
+
+    Returns:
+        - `str` plugin name when the component is in the cache (back-compat
+          shape for existing callers).
+        - `dict` with `hint` / `suggested_replacements` / `renamed: True` when
+          the component is *not* in the cache but SOFA's factory or the local
+          `renames.json` map identifies it as a retired class. This eliminates
+          the round-trip where the agent had to run `write_and_test_scene`
+          just to discover a rename.
+        - `str` "Component not found in cache" when truly unknown.
     """
     try:
         from . import plugin_cache
@@ -279,19 +427,43 @@ def get_plugin_for_component(component_name: str, context_components: list[dict]
             except Exception:
                  # If import fails, we return the name from cache.
                  return plugin_map[component_name]
-        
-        # If not in the cache, it's not found.
+
+        # Not in the cache → try the factory and the local renames map.
+        # SOFA's own error message is the gold source for rename hints
+        # ("X has been replaced since v25.12 by - Y - Z - W").
+        renames_map = _load_renames()
+        replacements: List[str] = []
+        factory_error = _factory_query_for_rename(component_name)
+        if factory_error:
+            replacements = _parse_replacements_from_error(factory_error)
+        if not replacements and component_name in renames_map:
+            replacements = list(renames_map[component_name])
+
+        if replacements:
+            return {
+                "plugin": None,
+                "renamed": True,
+                "hint": (
+                    f"`{component_name}` is retired. SOFA / local map suggests: "
+                    f"{', '.join(replacements)}."
+                ),
+                "suggested_replacements": replacements,
+            }
+
         return "Component not found in cache"
 
     except Exception as e:
         return f"Error during plugin query: {e}"
 
 
-def get_plugins_for_components(component_names: list[str], context_components: list[dict] = None) -> dict[str, str]:
+def get_plugins_for_components(component_names: list[str], context_components: list[dict] = None) -> Dict[str, Any]:
     """
     For a list of SOFA component names, returns a mapping to their required plugins.
+
+    Each value is either a plugin-name `str` (found in cache) or a dict with
+    rename information (see `get_plugin_for_component`).
     """
-    results = {}
+    results: Dict[str, Any] = {}
     # De-duplicate to avoid redundant checks
     for name in sorted(list(set(component_names))):
         results[name] = get_plugin_for_component(name, context_components=context_components)
@@ -388,12 +560,27 @@ def search_sofa_components(query: str, limit: int = 50) -> Dict[str, Any]:
         deduped = sorted({str(n) for n in names})
         matches = [n for n in deduped if match(n)]
 
-        return {
+        # Fold renamed-class results in: if any retired name matches the query
+        # tokens, prepend its modern replacements (with a `replaces` annotation)
+        # to the head of the results. Substring search alone can't bridge a
+        # rename like `GenericConstraintSolver` → `BlockGaussSeidel...`.
+        renames_map = _load_renames()
+        renamed_prefix: List[Dict[str, str]] = []
+        for retired, replacements in renames_map.items():
+            if match(retired):
+                for repl in replacements:
+                    renamed_prefix.append({"name": repl, "replaces": retired})
+
+        capped = matches[: int(limit)]
+        result: Dict[str, Any] = {
             "query": raw_query,
             "limit": int(limit),
-            "count": len(matches[: int(limit)]),
-            "matches": matches[: int(limit)],
+            "count": len(capped),
+            "matches": capped,
         }
+        if renamed_prefix:
+            result["renamed_replacements"] = renamed_prefix
+        return result
 
     except ImportError:
         return {"error": "Sofa.Core not found. Make sure your environment is sourced correctly."}

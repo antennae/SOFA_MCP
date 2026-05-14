@@ -7,7 +7,13 @@ import sys
 # This allows running the test script from the root directory
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from sofa_mcp.architect.component_query import query_sofa_component, search_sofa_components
+from sofa_mcp.architect.component_query import (
+    query_sofa_component,
+    search_sofa_components,
+    get_plugin_for_component,
+    _parse_replacements_from_error,
+    _load_renames,
+)
 
 
 
@@ -145,6 +151,70 @@ class TestComponentQuery(unittest.TestCase):
         mock_child.addObject.assert_called_with("TestComp", template="Vec3d")
         
         self.assertTrue(result["success"])
+
+    def test_parse_replacements_from_error(self):
+        # Matches the shape of SOFA's actual retired-component error message.
+        err = (
+            "GenericConstraintSolver has been replaced since v25.12 by a set of new components, "
+            "whose names relate to the method used:\n"
+            "  - BlockGaussSeidelConstraintSolver (if you were using this component without setting 'resolutionMethod')\n"
+            "  - UnbuiltGaussSeidelConstraintSolver (...)\n"
+            "  - NNCGConstraintSolver (...)\n"
+        )
+        replacements = _parse_replacements_from_error(err)
+        self.assertIn("BlockGaussSeidelConstraintSolver", replacements)
+        self.assertIn("NNCGConstraintSolver", replacements)
+        self.assertIn("UnbuiltGaussSeidelConstraintSolver", replacements)
+
+    def test_parse_replacements_returns_empty_when_no_marker(self):
+        # An ordinary error (no "replaced since") must not produce false positives.
+        self.assertEqual(_parse_replacements_from_error("some other error"), [])
+
+    def test_renames_json_loads(self):
+        renames = _load_renames()
+        self.assertIn("GenericConstraintSolver", renames)
+        self.assertIn("BlockGaussSeidelConstraintSolver", renames["GenericConstraintSolver"])
+        # The _comment key must be stripped.
+        self.assertNotIn("_comment", renames)
+
+    @patch('sofa_mcp.architect.component_query.Sofa.Core')
+    @patch('sofa_mcp.architect.plugin_cache.load_plugin_map')
+    @patch('sofa_mcp.architect.plugin_cache.get_cache_path')
+    def test_get_plugin_for_component_returns_rename_hint(self, mock_cache_path, mock_load, mock_sofa_core):
+        # Cache lookup misses, but our renames.json has GenericConstraintSolver.
+        # Must return the structured dict shape, not the plain "not found" string.
+        mock_cache_path.return_value = "/nonexistent/path.json"
+        mock_load.return_value = {}
+        # Factory probe will raise — no rename message in error, so _parse
+        # returns []. Falls through to renames.json.
+        mock_node = MagicMock()
+        mock_node.addObject.side_effect = Exception("unrelated factory error")
+        mock_sofa_core.Node.return_value = mock_node
+
+        # Ensure get_cache_path() points at an existing dir so plugin_cache
+        # doesn't try to regenerate. Use os.path.exists override via the
+        # existing logic: if path doesn't exist, generate is called — mock it.
+        with patch('sofa_mcp.architect.plugin_cache.generate_and_save_plugin_map'):
+            with patch('os.path.exists', return_value=True):
+                result = get_plugin_for_component("GenericConstraintSolver")
+
+        self.assertIsInstance(result, dict)
+        self.assertTrue(result.get("renamed"))
+        self.assertIn("BlockGaussSeidelConstraintSolver", result.get("suggested_replacements", []))
+
+    @patch('sofa_mcp.architect.plugin_cache.load_plugin_map')
+    def test_search_sofa_components_prepends_renamed_replacements(self, mock_load):
+        # When the substring match would miss the modern replacements (e.g. a
+        # `Generic` query), the renames map must add them via a separate field.
+        mock_load.return_value = {
+            "GenericConstraintCorrection": "Sofa.Component.Constraint.Lagrangian.Correction",
+            "SerialPortBridgeGeneric": "SoftRobots",
+        }
+        result = search_sofa_components("Generic")
+        self.assertIn("renamed_replacements", result)
+        names = {r["name"] for r in result["renamed_replacements"]}
+        self.assertIn("BlockGaussSeidelConstraintSolver", names)
+
 
 if __name__ == '__main__':
     unittest.main()
