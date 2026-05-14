@@ -3,7 +3,9 @@ import tempfile
 import os
 import pathlib
 import json
-from typing import Dict, Any
+import re
+import uuid
+from typing import Dict, Any, List, Optional, Tuple
 
 _SUMMARY_RUNTIME_TEMPLATE_PATH = os.path.join(
     os.path.dirname(os.path.abspath(__file__)),
@@ -11,6 +13,38 @@ _SUMMARY_RUNTIME_TEMPLATE_PATH = os.path.join(
 )
 
 _VALIDATION_SUCCESS_SENTINEL = "SUCCESS: Scene initialized and animated 1 step."
+
+# Init-time SOFA warnings that mean "the scene initialized but is structurally
+# broken" — e.g. a constraint got silently removed, a linear system has null
+# size, a mesh loader read nothing. We promote these to success=false so the
+# agent doesn't mistake "subprocess returned 0" for "scene actually works".
+# Reported in docs/feedback_2026-05-14_pneunet_session.md (issue 1).
+_PROMOTED_WARNING_PATTERNS: Tuple[Tuple[str, "re.Pattern[str]"], ...] = (
+    ("constraint_removed", re.compile(r"Constraint will be removed", re.IGNORECASE)),
+    ("invalid_index", re.compile(r"Index\s+-?\d+\s+not valid", re.IGNORECASE)),
+    ("invalid_linear_system", re.compile(r"Invalid Linear System to solve", re.IGNORECASE)),
+    ("factory_miss", re.compile(r"cannot be found in the factory", re.IGNORECASE)),
+    ("mesh_load_empty", re.compile(r"Loader did not find any (positions|vertices)", re.IGNORECASE)),
+    ("mesh_file_missing", re.compile(r"(File not found|Cannot open file|does not exist)", re.IGNORECASE)),
+)
+
+
+def _scan_init_warnings(text: str) -> List[Dict[str, str]]:
+    """Return one entry per promoted-warning hit in `text`.
+
+    Each entry has a `pattern` slug (see `_PROMOTED_WARNING_PATTERNS`) and the
+    matching log `line`. Callers use the presence of any entry as the signal to
+    demote `success` to false."""
+    if not text:
+        return []
+    hits: List[Dict[str, str]] = []
+    for raw_line in text.splitlines():
+        line = raw_line.rstrip()
+        for slug, regex in _PROMOTED_WARNING_PATTERNS:
+            if regex.search(line):
+                hits.append({"pattern": slug, "line": line})
+                break
+    return hits
 
 
 def _strip_success_sentinel(stdout: str) -> str:
@@ -50,42 +84,71 @@ def _build_wrapper_preamble(script_content: str, *, extra_imports: str = "") -> 
     return "\n".join(lines)
 
 
-def _build_validation_wrapper(create_scene_function: str) -> str:
+def _build_validation_wrapper(create_scene_function: str, *, plugin_map: Dict[str, str]) -> str:
     preamble = _build_wrapper_preamble(create_scene_function)
+    plugin_literal = json.dumps(plugin_map, separators=(",", ":"))
     return (
         preamble
-        + """
+        + f"""
+PLUGIN_FOR_CLASS = {plugin_literal}
+
 def _iter_nodes(node):
     yield node
     for child in getattr(node, 'children', []):
         yield from _iter_nodes(child)
 
-def _node_has_class(node, class_name: str) -> bool:
+def _safe_class_name(obj):
+    try:
+        return obj.getClassName() if hasattr(obj, 'getClassName') else ''
+    except Exception:
+        return ''
+
+def _node_has_class(node, class_name):
     for obj in getattr(node, 'objects', []):
-        try:
-            if hasattr(obj, 'getClassName') and obj.getClassName() == class_name:
-                return True
-        except Exception:
-            pass
+        if _safe_class_name(obj) == class_name:
+            return True
     return False
 
-def _tree_has_class(node, class_name: str) -> bool:
+def _tree_has_class(node, class_name):
     return any(_node_has_class(n, class_name) for n in _iter_nodes(node))
 
+def _tree_has_plugin_matching(node, predicate):
+    # predicate: str -> bool, applied to the plugin path for each object's class.
+    for n in _iter_nodes(node):
+        for obj in getattr(n, 'objects', []):
+            plugin = PLUGIN_FOR_CLASS.get(_safe_class_name(obj), '')
+            if plugin and predicate(plugin):
+                return True
+    return False
+
 def _assert_required_components(root):
-    # Flexible validation: we check if the scene tree contains the necessary physics building blocks.
-    checks = {
-        "AnimationLoop": _tree_has_class(root, "FreeMotionAnimationLoop") or _tree_has_class(root, "DefaultAnimationLoop"),
-        "ConstraintSolver": _tree_has_class(root, "NNCGConstraintSolver") or _tree_has_class(root, "QPInverseProblemSolver"),
-        "TimeIntegration": _tree_has_class(root, "EulerImplicitSolver") or _tree_has_class(root, "RungeKutta4Solver"),
-        "LinearSolver": _tree_has_class(root, "SparseLDLSolver") or _tree_has_class(root, "CGLinearSolver") or _tree_has_class(root, "SparseDirectSolver"),
-    }
-    
+    # Detect by plugin category (the source of truth from SOFA's own grouping)
+    # rather than hand-listing class names. Class renames between SOFA versions
+    # then don't need code updates here. See feedback_2026-05-14_pneunet_session.md.
+    checks = {{
+        "AnimationLoop": _tree_has_plugin_matching(
+            root, lambda p: p.startswith("Sofa.Component.AnimationLoop")
+        ) or _tree_has_class(root, "FreeMotionAnimationLoop")
+          or _tree_has_class(root, "DefaultAnimationLoop"),
+        "ConstraintSolver": _tree_has_plugin_matching(
+            root, lambda p: p == "Sofa.Component.Constraint.Lagrangian.Solver"
+                            or p == "SoftRobots.Inverse"
+        ),
+        "TimeIntegration": _tree_has_plugin_matching(
+            root, lambda p: p.startswith("Sofa.Component.ODESolver.")
+        ),
+        "LinearSolver": _tree_has_plugin_matching(
+            root, lambda p: p.startswith("Sofa.Component.LinearSolver.")
+        ),
+    }}
+
     missing = [k for k, v in checks.items() if not v]
     if missing:
-        # We don't raise here yet to allow the agent to see the warnings first, 
-        # but the tool output will reflect this.
-        print(f"WARNING: Missing key components: {', '.join(missing)}")
+        # Soft warning only — the validator still proceeds. If init then fails,
+        # the actual error path takes over. Promoted init-warning patterns
+        # (constraint removed, invalid linear system, etc.) are handled
+        # separately by _scan_init_warnings() in the parent process.
+        print(f"WARNING: Missing key components: {{', '.join(missing)}}")
 
 def validate():
     root = Sofa.Core.Node("root")
@@ -152,7 +215,11 @@ def _build_summary_wrapper(create_scene_function: str) -> str:
 
 
 def validate_scene(
-    script_content: str, *, timeout_s: int = 30, verbose: bool = False
+    script_content: str,
+    *,
+    timeout_s: int = 30,
+    verbose: bool = False,
+    output_filename: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Validates a user-provided scene snippet by initializing and animating one step.
 
@@ -162,16 +229,35 @@ def validate_scene(
     `verbose=False` (default) compacts the captured SOFA stdout/stderr
     via the shared allowlist + tail-anchor filter. `verbose=True` returns
     the full captured streams unchanged.
+
+    If `output_filename` is provided, the validator subprocess runs with
+    `cwd=<dir of output_filename>` so the scene's `__file__`-relative mesh
+    paths resolve against the directory where the scene will eventually live.
+    Without this, `__file__` evaluates to `/tmp/...` and loaders silently
+    read empty meshes — see docs/feedback_2026-05-14_pneunet_session.md (#2).
     """
     from sofa_mcp._log_compact import compact_log
 
     python_path = os.path.expanduser("~/venv/bin/python")
     create_scene_function = _build_scene_source(script_content)
-    validation_wrapper = _build_validation_wrapper(create_scene_function)
+    plugin_map = _load_plugin_map_for_wrapper()
+    validation_wrapper = _build_validation_wrapper(create_scene_function, plugin_map=plugin_map)
 
-    with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as tmp:
-        tmp.write(validation_wrapper)
-        tmp_path = tmp.name
+    cwd: Optional[str] = None
+    tmp_path: str
+    if output_filename:
+        out_dir = pathlib.Path(output_filename).expanduser().absolute().parent
+        out_dir.mkdir(parents=True, exist_ok=True)
+        cwd = str(out_dir)
+        # Put the temp script next to the eventual scene file so that
+        # __file__-relative paths resolve identically to a future `runSofa`.
+        tmp_path = str(out_dir / f".sofa_mcp_validate_{uuid.uuid4().hex[:8]}.py")
+        with open(tmp_path, "w", encoding="utf-8") as tmp:
+            tmp.write(validation_wrapper)
+    else:
+        with tempfile.NamedTemporaryFile(suffix=".py", mode="w", encoding="utf-8", delete=False) as tmp:
+            tmp.write(validation_wrapper)
+            tmp_path = tmp.name
 
     try:
         result = subprocess.run(
@@ -179,15 +265,29 @@ def validate_scene(
             capture_output=True,
             text=True,
             timeout=timeout_s,
+            cwd=cwd,
         )
 
+        stdout_raw = result.stdout or ""
+        stderr_raw = result.stderr or ""
+        # Scan both streams — SOFA's [WARNING] lines can arrive on either,
+        # depending on build / log routing.
+        init_warnings = _scan_init_warnings(stdout_raw + "\n" + stderr_raw)
+
         if result.returncode == 0:
-            stdout = _strip_success_sentinel(result.stdout or "")
+            stdout = _strip_success_sentinel(stdout_raw)
+            promoted = bool(init_warnings)
             response: Dict[str, Any] = {
-                "success": True,
-                "message": "Scene validated.",
+                "success": not promoted,
+                "message": (
+                    "Scene initialized but a structural warning was promoted to failure. "
+                    "See `init_warnings` for the matched lines."
+                    if promoted else "Scene validated."
+                ),
                 "stdout": stdout,
             }
+            if init_warnings:
+                response["init_warnings"] = init_warnings
             if not verbose:
                 compacted, dropped = compact_log(stdout)
                 response["stdout"] = compacted
@@ -195,14 +295,16 @@ def validate_scene(
                     response["log_lines_dropped"] = dropped
             return response
 
-        error_field = result.stderr or result.stdout or ""
-        stdout_field = result.stdout or ""
+        error_field = stderr_raw or stdout_raw
+        stdout_field = stdout_raw
         response = {
             "success": False,
             "message": "Validation failed. Please correct the script based on the error.",
             "error": error_field,
             "stdout": stdout_field,
         }
+        if init_warnings:
+            response["init_warnings"] = init_warnings
         if not verbose:
             error_compacted, error_dropped = compact_log(error_field)
             stdout_compacted, stdout_dropped = compact_log(stdout_field)
@@ -326,24 +428,35 @@ def write_scene(script_content: str, output_filename: str) -> Dict[str, Any]:
 
 
 def write_and_test_scene(script_content: str, output_filename: str) -> Dict[str, Any]:
-    """Validates a scene snippet and writes it to disk only on success."""
+    """Validates a scene snippet and writes it to disk only on success.
 
-    validation = validate_scene(script_content)
+    Validation runs with the subprocess `cwd` set to the eventual on-disk
+    directory of `output_filename`, so `__file__`-relative mesh paths resolve
+    consistently between validation and a later `runSofa` invocation.
+    """
+
+    validation = validate_scene(script_content, output_filename=output_filename)
     if not validation.get("success"):
-        return {
+        failure: Dict[str, Any] = {
             "success": False,
             "error": validation.get("error"),
             "message": validation.get("message", "Validation failed."),
             "stdout": validation.get("stdout", ""),
         }
+        if validation.get("init_warnings"):
+            failure["init_warnings"] = validation["init_warnings"]
+        return failure
 
     written = write_scene(script_content, output_filename)
-    return {
+    result: Dict[str, Any] = {
         "success": True,
         "message": "Scene validated and saved.",
         "path": written.get("path"),
         "stdout": validation.get("stdout", ""),
     }
+    if validation.get("init_warnings"):
+        result["init_warnings"] = validation["init_warnings"]
+    return result
 
 
 def load_scene(scene_path: str, *, max_bytes: int = 1_000_000) -> Dict[str, Any]:

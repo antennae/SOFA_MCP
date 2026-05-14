@@ -153,6 +153,59 @@ import Sofa
             if os.path.exists(output_file):
                 os.remove(output_file)
 
+    def test_validate_scene_demotes_promoted_warning(self):
+        # FixedProjectiveConstraint with an out-of-range index triggers
+        # SOFA's "Index N not valid" + "Constraint will be removed" warnings.
+        # Before the fix, validate_scene returned success=true; now it must
+        # demote to success=false and populate init_warnings.
+        script = """
+def createScene(rootNode):
+    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
+    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.Constraint.Projective")
+    rootNode.addObject("MechanicalObject", template="Vec3d",
+                       position=[[0, 0, 0], [1, 0, 0]])
+    rootNode.addObject("FixedProjectiveConstraint", indices=[42])
+"""
+        result = validate_scene(script)
+        self.assertFalse(
+            result["success"],
+            f"Expected demoted failure but got success. stdout: {result.get('stdout','')}",
+        )
+        slugs = {w["pattern"] for w in result.get("init_warnings", [])}
+        # At least one of these must fire for this scene.
+        self.assertTrue(
+            slugs & {"invalid_index", "constraint_removed"},
+            f"Expected init_warnings to include invalid_index or constraint_removed; got {slugs}",
+        )
+
+    def test_validate_scene_uses_output_dir_for_file_relative_paths(self):
+        # When output_filename is passed, the validator subprocess must run
+        # with cwd set to the file's eventual directory so that
+        # __file__-relative paths resolve correctly. We probe this by
+        # writing a marker file next to output_filename and checking that
+        # the scene script can see it via __file__-relative lookup.
+        import tempfile as _tempfile
+        with _tempfile.TemporaryDirectory() as workdir:
+            marker = os.path.join(workdir, "marker.txt")
+            with open(marker, "w") as f:
+                f.write("hello")
+            output_file = os.path.join(workdir, "scene.py")
+            script = """
+import os
+def createScene(rootNode):
+    here = os.path.dirname(os.path.abspath(__file__))
+    marker = os.path.join(here, "marker.txt")
+    if not os.path.exists(marker):
+        raise RuntimeError(f"marker not found relative to __file__={__file__}")
+    rootNode.addObject("RequiredPlugin", pluginName="Sofa.Component.StateContainer")
+    rootNode.addObject("MechanicalObject", position=[0, 0, 0])
+"""
+            result = validate_scene(script, output_filename=output_file)
+            self.assertTrue(
+                result["success"],
+                f"Expected success when cwd resolves __file__; error: {result.get('error')}",
+            )
+
 
 if __name__ == "__main__":
     unittest.main()
