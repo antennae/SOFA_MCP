@@ -360,6 +360,26 @@ def test_check_excessive_displacement_skips_missing_extent():
     assert diagnostics._check_excessive_displacement(metrics, extents) == []
 
 
+def test_check_excessive_displacement_routes_nan_to_solver_diverged():
+    """Non-finite displacement must surface as `solver_diverged` carrying
+    `first_nan_step`, not as `excessive_displacement` with an "infx the mesh
+    extent" message. See docs/feedback_2026-05-14_pneunet_session.md #7."""
+    metrics = {
+        "max_displacement_per_mo": {"/a": float("inf"), "/b": float("nan")},
+        "nan_first_step": 11,
+    }
+    extents = {"/a": 50.0, "/b": 50.0}
+    out = diagnostics._check_excessive_displacement(metrics, extents)
+    by_subject = {a["subject"]: a for a in out}
+    assert by_subject["/a"]["rule"] == "solver_diverged"
+    assert by_subject["/a"]["first_nan_step"] == 11
+    assert "infx the mesh extent" not in by_subject["/a"]["message"]
+    assert by_subject["/b"]["rule"] == "solver_diverged"
+    # Both finite-displacement-style fields must be absent on the divergence anomaly.
+    assert "ratio" not in by_subject["/a"]
+    assert "extent" not in by_subject["/a"]
+
+
 def test_check_solver_iter_cap_hit_records_step_indices():
     iters = {"/root::NNCG": [10, 10, 5, 10, 10]}
     caps = {"/root::NNCG": 10}

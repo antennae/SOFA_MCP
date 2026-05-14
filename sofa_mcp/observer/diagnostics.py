@@ -22,6 +22,7 @@ collapse to the same failure shape — runner crashed before producing payload.
 """
 
 import json
+import math
 import os
 import pathlib
 import subprocess
@@ -85,13 +86,33 @@ def _check_excessive_displacement(
     response so the agent can reason about it. The two-tier check replaces
     nan_first_step as the primary numerical-blowup detector since implicit
     ODE solvers rarely produce NaN.
+
+    Non-finite displacements (`inf` / `NaN`) are surfaced as a distinct
+    `solver_diverged` anomaly carrying `first_nan_step` rather than the
+    "Max displacement inf is infx the mesh extent" string the ratio path
+    would otherwise emit (see docs/feedback_2026-05-14_pneunet_session.md #7).
     """
     anomalies: List[Dict[str, Any]] = []
     disps = metrics.get("max_displacement_per_mo") or {}
+    nan_first_step = metrics.get("nan_first_step")
     for path, disp in disps.items():
         try:
             disp = float(disp)
         except (TypeError, ValueError):
+            continue
+        if not math.isfinite(disp):
+            anomalies.append({
+                "rule": "solver_diverged",
+                "severity": "error",
+                "subject": path,
+                "message": (
+                    f"Solver diverged on {path}: max displacement is "
+                    f"{'NaN' if math.isnan(disp) else 'inf'}"
+                    + (f" (first detected at step {nan_first_step})." if nan_first_step is not None
+                       else ".")
+                ),
+                "first_nan_step": nan_first_step,
+            })
             continue
         extent = extents_per_mo.get(path)
         if extent is None or extent <= 0:

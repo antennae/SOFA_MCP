@@ -1,6 +1,10 @@
 
 import os
 import sys
+import time
+import traceback
+import datetime as _dt
+import pathlib as _pathlib
 
 sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
@@ -16,6 +20,26 @@ import sofa_mcp.observer.diagnostics as diagnostics
 from sofa_mcp.observer import probes
 import sofa_mcp.optimizer.patcher as patcher
 
+# Crash-log path. The pneunet session (2026-05-14 feedback #6) hit a silent
+# stdio-transport drop with no diagnostic record — at minimum we want a place
+# on disk that captures the traceback if it happens again.
+_SERVER_LOG_PATH = os.path.expanduser("~/.sofa_mcp_results/server.log")
+_SERVER_START_TIME = time.time()
+
+
+def _log_server_event(level: str, message: str) -> None:
+    """Append a timestamped line to the server log; swallow any I/O error.
+
+    We never want logging itself to take down the server, so disk failures
+    here are silent on purpose."""
+    try:
+        _pathlib.Path(_SERVER_LOG_PATH).parent.mkdir(parents=True, exist_ok=True)
+        with open(_SERVER_LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"{_dt.datetime.now().isoformat(timespec='seconds')} [{level}] {message}\n")
+    except Exception:
+        pass
+
+
 # Create the MCP server instance
 mcp = FastMCP("SOFA MCP")
 
@@ -23,6 +47,46 @@ mcp = FastMCP("SOFA MCP")
 def health_check() -> dict:
     """Returns the server status and initialization state."""
     return {"status": "ready", "version": "1.0.0"}
+
+
+@mcp.tool()
+def server_status(log_tail: int = 20) -> dict:
+    """Returns server uptime, plugin-cache freshness, and recent log lines.
+
+    Use when a previous call returned a transport error and you want to
+    confirm the server is responsive again — eliminates the "is it alive?"
+    guessing the agent otherwise has to do.
+    """
+    from sofa_mcp.architect import plugin_cache
+    cache_path = plugin_cache.get_cache_path()
+    cache_info: dict[str, Any]
+    if os.path.exists(cache_path):
+        st = os.stat(cache_path)
+        cache_info = {
+            "path": cache_path,
+            "exists": True,
+            "size_bytes": st.st_size,
+            "mtime": _dt.datetime.fromtimestamp(st.st_mtime).isoformat(timespec="seconds"),
+        }
+    else:
+        cache_info = {"path": cache_path, "exists": False}
+
+    log_lines: list[str] = []
+    if os.path.exists(_SERVER_LOG_PATH):
+        try:
+            with open(_SERVER_LOG_PATH, "r", encoding="utf-8") as f:
+                lines = f.readlines()
+            log_lines = [ln.rstrip("\n") for ln in lines[-max(1, int(log_tail)):]]
+        except Exception:
+            pass
+
+    return {
+        "status": "ok",
+        "uptime_seconds": int(time.time() - _SERVER_START_TIME),
+        "log_path": _SERVER_LOG_PATH,
+        "log_tail": log_lines,
+        "plugin_cache": cache_info,
+    }
 
 
 @mcp.tool()
@@ -243,16 +307,33 @@ def perturb_and_run(
 
 def main() -> None:
     from sofa_mcp.architect.plugin_cache import generate_and_save_plugin_map
-    generate_and_save_plugin_map()
+    _log_server_event("info", "Plugin cache generation starting...")
+    try:
+        generate_and_save_plugin_map()
+        _log_server_event("info", "Plugin cache generation complete.")
+    except Exception as e:
+        _log_server_event("error", f"Plugin cache generation failed: {e}\n{traceback.format_exc()}")
+        raise
+
     port = int(os.environ.get("SOFA_MCP_PORT", "8000"))
-    mcp.run(
-        transport="streamable-http",
-        host="127.0.0.1",
-        port=port,
-        path="/mcp",
-        stateless_http=True,
-        json_response=True,
-    )
+    _log_server_event("info", f"Starting FastMCP on 127.0.0.1:{port}/mcp")
+    try:
+        mcp.run(
+            transport="streamable-http",
+            host="127.0.0.1",
+            port=port,
+            path="/mcp",
+            stateless_http=True,
+            json_response=True,
+        )
+    except BaseException as e:
+        # BaseException catches KeyboardInterrupt and SystemExit too — we want
+        # *any* termination recorded, since the original crash report (issue 6)
+        # described the process going silent without a Python-level exception.
+        _log_server_event("error", f"mcp.run terminated: {type(e).__name__}: {e}\n{traceback.format_exc()}")
+        raise
+    finally:
+        _log_server_event("info", "mcp.run exited.")
 
 
 if __name__ == "__main__":
