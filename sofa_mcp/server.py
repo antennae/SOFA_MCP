@@ -220,9 +220,29 @@ def mesh_stats(mesh_path: str) -> dict:
 
 
 @mcp.tool()
-def query_sofa_component(component_name: str, template: str = None, context_components: list[dict] = None) -> dict:
-    """Queries the SOFA component registry for a component."""
-    return component_query.query_sofa_component(component_name, template=template, context_components=context_components)
+def query_sofa_component(
+    component_name: str,
+    template: str = None,
+    context_components: list[dict] = None,
+    include_universal: bool = False,
+) -> dict:
+    """Queries the SOFA component registry for a component.
+
+    Honors `template` (the introspection scaffold is built to match, so a
+    `Rigid3d` request returns Rigid3d-shaped Data fields, not a silent Vec3d
+    fallback). Returns `templates`, `plugin`, `description`, `source_header`, and
+    an `introspection` field (`"full"` or `"metadata_only"`). When a registered
+    class can't be instantiated in the scaffold, returns `success: true` with
+    `introspection: "metadata_only"` and `data_fields: null` — not a misleading
+    "not found" error. Set `include_universal=True` to keep the 6 universal
+    BaseObject Data fields (name, printLog, tags, bbox, componentState, listening).
+    """
+    return component_query.query_sofa_component(
+        component_name,
+        template=template,
+        context_components=context_components,
+        include_universal=include_universal,
+    )
 
 
 @mcp.tool()

@@ -73,7 +73,7 @@ The cables in the rendered scene contract by 22mm, 12mm, and 5mm — asymmetric 
 | Category | Tools | Purpose |
 |---|---|---|
 | Scene authoring | `validate_scene`, `summarize_scene`, `write_scene`, `write_and_test_scene`, `load_scene`, `patch_scene` | Generate, validate, save, and patch SOFA scene files |
-| Component lookup | `query_sofa_component`, `search_sofa_components`, `get_plugins_for_components` | Find components in the registry; resolve their plugins |
+| Component lookup | `query_sofa_component`, `search_sofa_components`, `get_plugins_for_components` | Find components in the registry; resolve their plugins. `query_sofa_component` is template-aware and returns the registered template list + source header. |
 | Mesh | `mesh_stats`, `find_indices_by_region`, `resolve_asset_path`, `generate_volume_mesh` | Inspect meshes; convert STL surfaces to volumetric VTK via gmsh |
 | Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `render_scene_snapshot` | Run scenes, extract data, render final-frame snapshots |
 | Diagnostics | `diagnose_scene`, `enable_logs_and_run`, `perturb_and_run` | Smell-test a scene over N steps (NaN, divergence, QP infeasibility, ...); capture component logs; perturb a Data field and re-run to test a hypothesis |
