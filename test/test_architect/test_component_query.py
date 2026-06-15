@@ -13,6 +13,7 @@ from sofa_mcp.architect.component_query import (
     get_plugin_for_component,
     _parse_replacements_from_error,
     _load_renames,
+    _scaffold_template_for,
 )
 
 
@@ -151,6 +152,17 @@ class TestComponentQuery(unittest.TestCase):
         mock_child.addObject.assert_called_with("TestComp", template="Vec3d")
         
         self.assertTrue(result["success"])
+
+    def test_scaffold_template_for(self):
+        self.assertEqual(_scaffold_template_for("Rigid3d"), "Rigid3d")
+        self.assertEqual(_scaffold_template_for("Rigid3"), "Rigid3d")   # missing 'd' suffix
+        self.assertEqual(_scaffold_template_for("Rigid2d"), "Rigid2d")
+        self.assertEqual(_scaffold_template_for("Vec3d"), "Vec3d")
+        self.assertEqual(_scaffold_template_for("Vec1d"), "Vec1d")
+        self.assertEqual(_scaffold_template_for("Vec6"), "Vec6d")
+        self.assertEqual(_scaffold_template_for(None), "Vec3d")          # default
+        self.assertEqual(_scaffold_template_for("UnknownTemplate"), "Vec3d")
+        self.assertEqual(_scaffold_template_for("Rigid"), "Rigid3d")     # bare rigid → 3d
 
     def test_parse_replacements_from_error(self):
         # Matches the shape of SOFA's actual retired-component error message.

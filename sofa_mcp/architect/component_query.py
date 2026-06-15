@@ -70,6 +70,45 @@ def _parse_replacements_from_error(err_text: str) -> List[str]:
     return seen
 
 
+# BaseObject Data fields present on every component — constant noise. Stripped
+# from `data_fields` by default; `include_universal=True` keeps them.
+_UNIVERSAL_DATA_FIELDS = frozenset(
+    {"name", "printLog", "tags", "bbox", "componentState", "listening"}
+)
+
+# Template family → (mstate template, 4-point position array). 4 points keep the
+# tet/tri topology indices [0..3] valid. We never call init(), so the topology is
+# only there so topology-dependent components can construct.
+_SCAFFOLD_POSITIONS = {
+    "Vec1d": [[0.0], [1.0], [2.0], [3.0]],
+    "Vec2d": [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
+    "Vec3d": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
+    "Vec6d": [[0.0, 0, 0, 0, 0, 0], [1.0, 0, 0, 0, 0, 0],
+              [0, 1.0, 0, 0, 0, 0], [0, 0, 1.0, 0, 0, 0]],
+    "Rigid3d": [[0, 0, 0, 0, 0, 0, 1.0], [1.0, 0, 0, 0, 0, 0, 1.0],
+                [0, 1.0, 0, 0, 0, 0, 1.0], [0, 0, 1.0, 0, 0, 0, 1.0]],
+    "Rigid2d": [[0.0, 0, 0], [1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]],
+}
+
+
+def _scaffold_template_for(template: Optional[str]) -> str:
+    """Map a requested SOFA template to the scaffold mstate template key.
+
+    Handles exact keys (`Vec3d`), the missing-`d` form (`Vec3`, `Rigid3`), and
+    falls back to `Vec3d` for anything unrecognized (bare `Rigid` → `Rigid3d`)."""
+    if not template:
+        return "Vec3d"
+    t = str(template)
+    for key in _SCAFFOLD_POSITIONS:
+        if t == key or t == key[:-1]:  # "Rigid3" matches "Rigid3d"
+            return key
+    if t.startswith("Rigid2"):
+        return "Rigid2d"
+    if t.startswith("Rigid"):
+        return "Rigid3d"
+    return "Vec3d"
+
+
 def _is_registered_component(component_name: str) -> Tuple[bool, Optional[str]]:
     """Return `(is_registered, plugin_or_None)`.
 
