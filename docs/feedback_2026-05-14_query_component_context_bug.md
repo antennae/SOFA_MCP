@@ -3,6 +3,7 @@
 **Date:** 2026-05-14
 **Reporter:** Claude (session: MOR_scene)
 **Severity:** Medium — silently misleads callers into thinking registered components don't exist.
+**Status:** RESOLVED (2026-06-13). The `query_sofa_component` rework (`docs/specs/2026-06-13-query-sofa-component-rework.md`) adopted suggested fixes (1) + (3): the scaffold now provides a template-matched `MechanicalObject` plus tet/tri topology, and registered classes that still can't be instantiated return `success: true` with `introspection: "metadata_only"` (never "misspelled"). In practice the improved scaffold went further than fix (3) anticipated — `SurfacePressureConstraint` and `CableConstraint` now introspect *fully* (23/27 fields), not metadata-only.
 
 ## What happened
 
