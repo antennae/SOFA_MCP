@@ -109,6 +109,57 @@ def _scaffold_template_for(template: Optional[str]) -> str:
     return "Vec3d"
 
 
+def _build_scaffold(root: Any, template: Optional[str]) -> None:
+    """Add a template-matched MechanicalObject + tet/tri topology to `root`.
+
+    The mstate template is chosen so per-template Data shapes come out correct
+    (a Vec3d mstate silently degrades a Rigid3d request). The dual topology
+    triggers a benign 'one Topology per Node' warning — harmless because we
+    never call init()."""
+    key = _scaffold_template_for(template)
+    root.addObject("MechanicalObject", template=key, name="dummy_mstate",
+                   position=_SCAFFOLD_POSITIONS[key])
+    root.addObject("TetrahedronSetTopologyContainer", name="dummy_tet_topology",
+                   tetrahedra=[[0, 1, 2, 3]])
+    root.addObject("TriangleSetTopologyContainer", name="dummy_tri_topology",
+                   triangles=[[0, 1, 2], [0, 2, 3], [0, 3, 1], [1, 3, 2]])
+
+
+def _get_class_entry_metadata(component_name: str) -> Optional[Dict[str, Any]]:
+    """Read instantiation-independent metadata from the ObjectFactory ClassEntry.
+
+    Loads the registering plugin first (ClassEntry.templates only populates after
+    load). Returns None when unavailable (e.g. Sofa.Core mocked in unit tests, or
+    the factory raised)."""
+    try:
+        from . import plugin_cache
+        plugin = None
+        try:
+            plugin = plugin_cache.load_plugin_map().get(component_name)
+        except Exception:
+            plugin = None
+        if plugin:
+            try:
+                import SofaRuntime
+                SofaRuntime.importPlugin(plugin)
+            except Exception:
+                pass
+        ce = Sofa.Core.ObjectFactory.getComponent(component_name)
+        templates = sorted(str(t) for t in ce.templates)  # raises if ce is a mock
+        default_template = str(ce.defaultTemplate) or None
+        locations = [str(p) for p in ce.locations]
+        description = str(ce.description).strip() or None
+        return {
+            "templates": templates,
+            "default_template": default_template,
+            "plugin": plugin,
+            "description": description,
+            "source_header": locations[0] if locations else None,
+        }
+    except Exception:
+        return None
+
+
 def _is_registered_component(component_name: str) -> Tuple[bool, Optional[str]]:
     """Return `(is_registered, plugin_or_None)`.
 
