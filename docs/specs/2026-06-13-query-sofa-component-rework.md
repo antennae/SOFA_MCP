@@ -110,3 +110,7 @@ Unknown class (typo / plugin truly absent): `success: false` with `hints`, `sugg
 - `skills/sofa-mcp/sofa-mcp/SKILL.md` — note `templates`/`template` round-trip and `introspection` field in the discovery workflow (keep tight per house style).
 - `server.py` tool docstring for `query_sofa_component` (add `include_universal`, mention metadata fallback).
 - `README.md` tool table (no shape change needed; mention template-awareness if space).
+
+## Implementation note (2026-06-13, post-build)
+
+**The fix landed bigger than this spec assumed.** The template-matched 4-point scaffold + tet/tri topology now **fully introspects `SurfacePressureConstraint`** (23 fields, `introspection: "full"`) and `CableConstraint` (27 fields) — the SoftRobots constraints that motivated the 5-14 false-negative bug are now *completely* introspectable, not merely `metadata_only`. So the "Registered but not instantiable" worked example above (which used `SurfacePressureConstraint`) is **stale**; the accurate `metadata_only` fixture is a class still needing wired from-/to-states, e.g. `BarycentricMapping` (`plugin: Sofa.Component.Mapping.Linear`). The integration test (`test_registered_but_not_instantiable_fallback`) uses `BarycentricMapping` accordingly. The `metadata_only` path and its contract are unchanged — only which classes exercise it. Final state: 74 tests pass across `test/test_architect/`.
