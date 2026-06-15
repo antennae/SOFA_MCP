@@ -134,7 +134,7 @@ class TestComponentQuery(unittest.TestCase):
         mock_node = MagicMock()
         mock_sofa_core.Node.return_value = mock_node
         mock_child = mock_node.addChild.return_value
-        
+
         mock_component = MagicMock()
         mock_component.getName.return_value = "TestComp"
         mock_component.getClassName.return_value = "TestComp"
@@ -144,14 +144,41 @@ class TestComponentQuery(unittest.TestCase):
 
         context = [{"type": "HexahedronSetTopologyContainer", "name": "topo"}]
         result = query_sofa_component("TestComp", template="Vec3d", context_components=context)
-        
+
         # Verify context components were added to root node
         mock_node.addObject.assert_any_call("HexahedronSetTopologyContainer", name="topo")
-        
+
         # Verify target component was added to child node with template
         mock_child.addObject.assert_called_with("TestComp", template="Vec3d")
-        
+
         self.assertTrue(result["success"])
+
+    @patch('sofa_mcp.architect.component_query.Sofa.Core')
+    def test_universal_fields_stripped_mocked(self, mock_sofa_core):
+        def mk(name):
+            d = MagicMock()
+            d.getName.return_value = name
+            d.getValueTypeString.return_value = "string"
+            d.getValue.return_value = "v"
+            d.getHelp.return_value = "h"
+            return d
+        comp = MagicMock()
+        comp.getName.return_value = "C"
+        comp.getClassName.return_value = "C"
+        comp.getTemplateName.return_value = "Vec3d"
+        comp.getDataFields.return_value = [mk("printLog"), mk("youngModulus")]
+        comp.getLinks.return_value = []
+        node = MagicMock()
+        mock_sofa_core.Node.return_value = node
+        node.addChild.return_value.addObject.return_value = comp
+
+        r = query_sofa_component("C")
+        self.assertNotIn("printLog", r["data_fields"])
+        self.assertIn("youngModulus", r["data_fields"])
+        self.assertEqual(r["introspection"], "full")
+
+        r2 = query_sofa_component("C", include_universal=True)
+        self.assertIn("printLog", r2["data_fields"])
 
     def test_scaffold_template_for(self):
         self.assertEqual(_scaffold_template_for("Rigid3d"), "Rigid3d")
