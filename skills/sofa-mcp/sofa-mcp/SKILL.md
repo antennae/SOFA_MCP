@@ -15,6 +15,8 @@ The MCP server must be running on `http://127.0.0.1:8000/mcp` before any tool ca
 
 Wait for `Uvicorn running on http://127.0.0.1:8000` in the log before the first tool call. First start takes ~30 seconds while the plugin cache builds.
 
+**Use the native MCP tools, not curl.** The tools should be available as `mcp__sofa-mcp__<tool_name>`. If they aren't, the server isn't registered with the client — register once (Claude Code: `claude mcp add --transport http --scope user sofa-mcp http://127.0.0.1:8000/mcp`, then `/mcp` to reconnect) instead of falling back to raw HTTP. Curl loses the per-tool schemas and leads to guessed tool names; see README "Connect your agent" for details and crash recovery.
+
 ## Workflow: natural language → validated scene
 
 When the user says "I want a SOFA scene that ...":

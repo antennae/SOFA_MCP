@@ -29,6 +29,26 @@ sofa-mcp
 
 The server listens on `http://127.0.0.1:8000/mcp` (streamable HTTP, JSON-RPC 2.0). On first launch it scans `$SOFA_ROOT/lib` to build the plugin → component cache (`.sofa_mcp_results/.sofa-component-plugin-map.json`); this takes ~30 seconds and only happens once.
 
+### Connect your agent (Claude Code)
+
+Without this step the tools are only reachable via raw `curl` — the agent loses the per-tool schemas and starts guessing tool names. Register the server once so the tools appear as native functions:
+
+```bash
+claude mcp add --transport http --scope user sofa-mcp http://127.0.0.1:8000/mcp
+```
+
+- `--scope user` makes the tools available in **every** project on this machine — recommended, since scenes usually live in other repos.
+- Drop the flag (local scope) to limit it to the current project, or use `--scope project` to write a shareable `.mcp.json` into the repo root.
+
+Verify with `claude mcp list` (should show `sofa-mcp: ✓ connected`) or `/mcp` inside a session. Tools appear as `mcp__sofa-mcp__<tool_name>`.
+
+Two things to know:
+
+1. **Claude Code does not start the server for you.** HTTP servers are attach-only; start `sofa-mcp` before (or during) the session. Registration persists either way — if the server isn't running, the tools just show as disconnected until it is.
+2. **If the server dies mid-session**, calls fail with `MCP error -32000: Connection closed`. Restart the server, then run `/mcp` to reconnect; check `~/.sofa_mcp_results/server.log` for the crash trace.
+
+Other MCP clients (Gemini CLI, Cursor, Copilot CLI) connect the same way — point a `streamable-http` server entry at `http://127.0.0.1:8000/mcp` in the client's MCP config.
+
 ## Worked example: tri-leg cable robot
 
 A natural-language prompt to the agent:
