@@ -83,11 +83,11 @@ _SCAFFOLD_POSITIONS = {
     "Vec1d": [[0.0], [1.0], [2.0], [3.0]],
     "Vec2d": [[0.0, 0.0], [1.0, 0.0], [0.0, 1.0], [1.0, 1.0]],
     "Vec3d": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-    "Vec6d": [[0.0, 0, 0, 0, 0, 0], [1.0, 0, 0, 0, 0, 0],
-              [0, 1.0, 0, 0, 0, 0], [0, 0, 1.0, 0, 0, 0]],
-    "Rigid3d": [[0, 0, 0, 0, 0, 0, 1.0], [1.0, 0, 0, 0, 0, 0, 1.0],
-                [0, 1.0, 0, 0, 0, 0, 1.0], [0, 0, 1.0, 0, 0, 0, 1.0]],
-    "Rigid2d": [[0.0, 0, 0], [1.0, 0, 0], [0, 1.0, 0], [0, 0, 1.0]],
+    "Vec6d": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0], [1.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+              [0.0, 1.0, 0.0, 0.0, 0.0, 0.0], [0.0, 0.0, 1.0, 0.0, 0.0, 0.0]],
+    "Rigid3d": [[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0], [1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 1.0],
+                [0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]],
+    "Rigid2d": [[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
 }
 
 
@@ -129,8 +129,12 @@ def _get_class_entry_metadata(component_name: str) -> Optional[Dict[str, Any]]:
     """Read instantiation-independent metadata from the ObjectFactory ClassEntry.
 
     Loads the registering plugin first (ClassEntry.templates only populates after
-    load). Returns None when unavailable (e.g. Sofa.Core mocked in unit tests, or
-    the factory raised)."""
+    load). Returns a dict whose fields may be empty/None for an unknown class (the
+    factory returns an empty ClassEntry rather than raising). Returns None only on
+    an unexpected error. The `isinstance` guards keep mocked unit tests (where
+    `Sofa.Core` is a MagicMock) from leaking MagicMock repr strings into the
+    scalar fields — under a mock the set/list fields iterate empty and the scalar
+    fields fall back to None."""
     try:
         from . import plugin_cache
         plugin = None
@@ -145,10 +149,12 @@ def _get_class_entry_metadata(component_name: str) -> Optional[Dict[str, Any]]:
             except Exception:
                 pass
         ce = Sofa.Core.ObjectFactory.getComponent(component_name)
-        templates = sorted(str(t) for t in ce.templates)  # raises if ce is a mock
-        default_template = str(ce.defaultTemplate) or None
-        locations = [str(p) for p in ce.locations]
-        description = str(ce.description).strip() or None
+        templates = sorted(str(t) for t in ce.templates if isinstance(t, str))
+        dt = ce.defaultTemplate
+        default_template = dt if isinstance(dt, str) and dt else None
+        desc = ce.description
+        description = desc.strip() if isinstance(desc, str) and desc.strip() else None
+        locations = [p for p in ce.locations if isinstance(p, str)]
         return {
             "templates": templates,
             "default_template": default_template,
@@ -370,6 +376,7 @@ def query_sofa_component(
             if is_registered:
                 resp: Dict[str, Any] = {
                     "class_name": component_name,
+                    "template": None,  # nothing was instantiated; keep schema uniform with the full path
                     "data_fields": None,
                     "links": None,
                     "introspection": "metadata_only",

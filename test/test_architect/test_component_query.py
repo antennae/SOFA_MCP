@@ -190,6 +190,9 @@ class TestComponentQuery(unittest.TestCase):
         self.assertEqual(_scaffold_template_for(None), "Vec3d")          # default
         self.assertEqual(_scaffold_template_for("UnknownTemplate"), "Vec3d")
         self.assertEqual(_scaffold_template_for("Rigid"), "Rigid3d")     # bare rigid → 3d
+        # startswith fallback branches for exotic/uncatalogued rigid templates
+        self.assertEqual(_scaffold_template_for("Rigid2f"), "Rigid2d")
+        self.assertEqual(_scaffold_template_for("Rigid3f"), "Rigid3d")
 
     def test_parse_replacements_from_error(self):
         # Matches the shape of SOFA's actual retired-component error message.

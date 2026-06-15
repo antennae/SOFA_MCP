@@ -5,7 +5,10 @@ import unittest
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-from sofa_mcp.architect.component_query import _get_class_entry_metadata
+from sofa_mcp.architect.component_query import (
+    _get_class_entry_metadata,
+    query_sofa_component,
+)
 
 
 class TestClassEntryMetadata(unittest.TestCase):
@@ -21,13 +24,6 @@ class TestClassEntryMetadata(unittest.TestCase):
         md = _get_class_entry_metadata("NotARealComponentXYZ")
         # Either None (factory raised) or a dict with no templates.
         self.assertTrue(md is None or not md.get("templates"))
-
-
-if __name__ == '__main__':
-    unittest.main()
-
-
-from sofa_mcp.architect.component_query import query_sofa_component
 
 
 class TestQueryBehavior(unittest.TestCase):
@@ -66,6 +62,7 @@ class TestQueryBehavior(unittest.TestCase):
         self.assertTrue(r["success"])            # NOT a false negative
         self.assertEqual(r["introspection"], "metadata_only")
         self.assertIsNone(r["data_fields"])
+        self.assertIsNone(r["template"])  # schema uniform with the full path
         self.assertEqual(r["plugin"], "Sofa.Component.Mapping.Linear")
         self.assertNotIn("misspelled", str(r).lower())
 
@@ -76,3 +73,7 @@ class TestQueryBehavior(unittest.TestCase):
             r["error"],
             "Could not create an instance of TotallyMadeUpComponentXYZ for inspection.",
         )
+
+
+if __name__ == '__main__':
+    unittest.main()
