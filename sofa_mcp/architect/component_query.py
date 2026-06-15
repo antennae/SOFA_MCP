@@ -271,38 +271,48 @@ def _maybe_auto_import_component_plugins(core: Any) -> None:
     _AUTO_IMPORTED_PLUGINS = True
 
 
-def query_sofa_component(component_name: str, template: str = None, context_components: list[dict] = None) -> dict:
+def query_sofa_component(
+    component_name: str,
+    template: str = None,
+    context_components: list[dict] = None,
+    include_universal: bool = False,
+) -> dict:
     """
-    Queries the SOFA component registry for a component and returns its
-    data fields, default values, and Python bindings.
+    Queries the SOFA component registry for a component and returns its data
+    fields, default values, Python bindings, and factory metadata (templates,
+    plugin, source header).
 
     Args:
         component_name: Name of the SOFA component class.
-        template: Optional template (e.g., 'Vec3d', 'Rigid3d') to use.
+        template: Optional template (e.g. 'Vec3d', 'Rigid3d'). The introspection
+            scaffold is built to match, so per-template Data shapes are correct.
         context_components: Optional list of components to add to the context node
-            before creating the target component. Each dict should have a 'type'
-            key and optional data field keys.
+            before creating the target. Each dict has a 'type' key + data fields.
+        include_universal: Include the 6 universal BaseObject Data fields
+            (name, printLog, tags, bbox, componentState, listening). Default False.
     """
     try:
         import SofaRuntime
-        
-        # Ensure common base plugins are loaded so we can build a valid context
+
         base_plugins = [
             "Sofa.Component.StateContainer",
             "Sofa.Component.Topology.Container.Constant",
             "Sofa.Component.Topology.Container.Dynamic",
             "Sofa.Component.Visual",
-            "Sofa.GL.Component.Rendering3D"
+            "Sofa.GL.Component.Rendering3D",
         ]
         for p in base_plugins:
             try:
                 SofaRuntime.importPlugin(p)
-            except:
+            except Exception:
                 pass
 
-        # 1. Prepare a dummy context with common dependencies
+        # Factory metadata also loads the registering plugin, which helps the
+        # instantiation below succeed and populates ClassEntry.templates.
+        metadata = _get_class_entry_metadata(component_name)
+
         root = Sofa.Core.Node("registryQueryNode")
-        
+
         if context_components:
             for comp in context_components:
                 c_type = comp.get("type")
@@ -312,108 +322,87 @@ def query_sofa_component(component_name: str, template: str = None, context_comp
                 try:
                     root.addObject(c_type, **kwargs)
                 except Exception as e:
-                    # First attempt failed, check for a missing plugin.
-                    err_msg = str(e)
-                    p_match = re.search(r"<RequiredPlugin name=[\"']([^\"']+)[\"']/>", err_msg)
+                    p_match = re.search(r"<RequiredPlugin name=[\"']([^\"']+)[\"']/>", str(e))
                     if p_match:
                         try:
-                            plugin_name = p_match.group(1)
-                            SofaRuntime.importPlugin(plugin_name)
-                            # Retry adding the component now that plugin is loaded.
+                            SofaRuntime.importPlugin(p_match.group(1))
                             root.addObject(c_type, **kwargs)
-                        except:
-                            # If it still fails, we pass and let the main component query fail,
-                            # which will provide better diagnostics to the user.
+                        except Exception:
                             pass
         else:
-            # Beefier default scaffold: enough geometry/topology that most
-            # SoftRobots constraints, mappings, and topology-dependent FFs
-            # can construct against it. Empty topology containers were not
-            # sufficient — `SurfacePressureConstraint` needs real triangles.
-            # See docs/feedback_2026-05-14_query_component_context_bug.md.
-            root.addObject(
-                "MechanicalObject",
-                template="Vec3d",
-                name="dummy_mstate",
-                position=[[0.0, 0.0, 0.0], [1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, 1.0]],
-            )
-            root.addObject("TetrahedronSetTopologyContainer",
-                           name="dummy_tet_topology",
-                           tetrahedra=[[0, 1, 2, 3]])
-            root.addObject("TriangleSetTopologyContainer",
-                           name="dummy_tri_topology",
-                           triangles=[[0, 1, 2], [0, 2, 3], [0, 3, 1], [1, 3, 2]])
-        
-        # We use a child node for the target component so it can definitely see 
-        # siblings/parents for link resolution.
+            effective = template or (metadata.get("default_template") if metadata else None)
+            _build_scaffold(root, effective)
+
         child = root.addChild("targetNode")
-        
-        def try_create(node, name, template=None):
+
+        def try_create(node, name, tmpl=None):
             try:
-                if template:
-                    return node.addObject(name, template=template)
+                if tmpl:
+                    return node.addObject(name, template=tmpl)
                 return node.addObject(name)
             except Exception as e:
                 return e
 
-        res = try_create(child, component_name, template=template)
-        
-        # 2. Diagnose failure and attempt specific repairs
+        res = try_create(child, component_name, tmpl=template)
+
+        # Diagnose failure and attempt specific repairs.
         if res is None or isinstance(res, Exception):
             err_msg = str(res) if res is not None else f"addObject('{component_name}') returned None"
-            
-            # Case A: Missing Plugin
             plugin_match = re.search(r"<RequiredPlugin name='([^']+)'/>", err_msg)
             if plugin_match:
-                plugin_name = plugin_match.group(1)
                 try:
-                    SofaRuntime.importPlugin(plugin_name)
-                    res = try_create(child, component_name, template=template) # Retry
-                except:
+                    SofaRuntime.importPlugin(plugin_match.group(1))
+                    res = try_create(child, component_name, tmpl=template)
+                except Exception:
                     pass
-
-            # Case B: Still failing with template/context error
             if res is None or isinstance(res, Exception):
                 err_text = str(res) if res is not None else ""
-                if "template" in err_text.lower() or "mstate" in err_text.lower() or "topology" in err_text.lower() or res is None:
-                    # Try forcing a common template if not already specified
+                if ("template" in err_text.lower() or "mstate" in err_text.lower()
+                        or "topology" in err_text.lower() or res is None):
                     if not template:
-                        res = try_create(child, component_name, template="Vec3d")
+                        res = try_create(child, component_name, tmpl="Vec3d")
 
-        # If it still failed, return the error with hints + registry metadata.
+        # Still failing: registered → metadata-only success; else → unknown error.
         if res is None or isinstance(res, Exception):
             error_text = str(res) if res is not None else "Unknown error (addObject returned None)"
-
             is_registered, plugin = _is_registered_component(component_name)
+
+            if is_registered:
+                resp: Dict[str, Any] = {
+                    "class_name": component_name,
+                    "data_fields": None,
+                    "links": None,
+                    "introspection": "metadata_only",
+                    "note": (
+                        f"{component_name} is registered but could not be instantiated in the "
+                        "introspection scaffold, so its Data fields are unknown. The class exists "
+                        "and the listed templates are valid. For field-level schema, write a "
+                        "candidate scene and run write_and_test_scene."
+                    ),
+                    "success": True,
+                }
+                if metadata:
+                    for k in ("templates", "default_template", "plugin", "description", "source_header"):
+                        resp[k] = metadata[k]
+                else:
+                    resp["plugin"] = plugin
+                return resp
+
+            # Truly unknown — keep the existing error contract.
             replacements = _parse_replacements_from_error(error_text)
             renames_map = _load_renames()
             if not replacements and component_name in renames_map:
                 replacements = list(renames_map[component_name])
 
             hints: List[str] = []
-            if is_registered:
-                # The name IS in the registry — the old "misspelled or plugin
-                # not loaded" hint was misleading and pushed callers toward
-                # rewriting against a different API. Be explicit about what
-                # actually went wrong.
-                hints.append(
-                    f"{component_name} is registered (plugin: {plugin or 'unknown'}) but could not be "
-                    "instantiated in the dummy context. Try passing `context_components=` with a "
-                    "parent MechanicalObject + topology, or trust `search_sofa_components` for "
-                    "existence and use `write_and_test_scene` to surface field-level errors."
-                )
-            else:
-                if "mstate" in error_text.lower():
-                    hints.append("This component requires a MechanicalObject (mstate) in its context.")
-                if "topology" in error_text.lower():
-                    hints.append("This component requires a TopologyContainer (e.g. TetrahedronSetTopologyContainer).")
-                if "factory" in error_text.lower() and "plugin" not in error_text.lower():
-                    hints.append("The component name might be misspelled or the plugin is not loaded.")
-
+            if "mstate" in error_text.lower():
+                hints.append("This component requires a MechanicalObject (mstate) in its context.")
+            if "topology" in error_text.lower():
+                hints.append("This component requires a TopologyContainer (e.g. TetrahedronSetTopologyContainer).")
+            if "factory" in error_text.lower() and "plugin" not in error_text.lower():
+                hints.append("The component name might be misspelled or the plugin is not loaded.")
             if replacements:
-                hints.append(
-                    f"SOFA suggests replacements for `{component_name}`: {', '.join(replacements)}."
-                )
+                hints.append(f"SOFA suggests replacements for `{component_name}`: {', '.join(replacements)}.")
 
             response: Dict[str, Any] = {
                 "error": f"Could not create an instance of {component_name} for inspection.",
@@ -421,20 +410,18 @@ def query_sofa_component(component_name: str, template: str = None, context_comp
                 "hints": hints,
                 "success": False,
             }
-            if is_registered:
-                response["registry_metadata"] = {
-                    "class_name": component_name,
-                    "plugin": plugin,
-                    "registered": True,
-                }
             if replacements:
                 response["suggested_replacements"] = replacements
             return response
 
+        # Success.
         component = res
         data_fields = {}
         for data in component.getDataFields():
-            data_fields[data.getName()] = {
+            fname = data.getName()
+            if not include_universal and fname in _UNIVERSAL_DATA_FIELDS:
+                continue
+            data_fields[fname] = {
                 "type": data.getValueTypeString(),
                 "value": str(data.getValue()),
                 "help": str(data.getHelp()),
@@ -446,20 +433,28 @@ def query_sofa_component(component_name: str, template: str = None, context_comp
             if hasattr(link, "isMultiLink"):
                 prop = getattr(link, "isMultiLink")
                 is_multi = prop() if callable(prop) else bool(prop)
-            
-            links.append({
-                "name": link.getName(),
-                "help": str(link.getHelp()),
-                "is_multi": is_multi
-            })
+            links.append({"name": link.getName(), "help": str(link.getHelp()), "is_multi": is_multi})
 
-        return {
+        actual_template = None
+        try:
+            tn = component.getTemplateName()
+            actual_template = tn if isinstance(tn, str) else None
+        except Exception:
+            actual_template = None
+
+        response = {
             "name": component.getName(),
             "class_name": component.getClassName(),
+            "template": actual_template or (str(template) if template else None),
             "data_fields": data_fields,
             "links": links,
-            "success": True
+            "introspection": "full",
+            "success": True,
         }
+        if metadata:
+            for k in ("templates", "default_template", "plugin", "description", "source_header"):
+                response[k] = metadata[k]
+        return response
 
     except ImportError:
         return {"error": "Sofa.Core not found. Make sure your environment is sourced correctly."}
