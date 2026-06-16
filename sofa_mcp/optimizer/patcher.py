@@ -1,5 +1,6 @@
 import ast
 import os
+import tempfile
 from typing import Any, Dict
 
 def update_data_field(scene_path: str, object_name: str, field_name: str, new_value: Any) -> Dict[str, Any]:
@@ -128,8 +129,20 @@ def update_data_field(scene_path: str, object_name: str, field_name: str, new_va
              # Fallback if no arguments found (unlikely for addObject)
              return {"success": False, "error": "Could not determine insertion point (no arguments found)."}
 
-    # Write back
-    with open(scene_path, "w", encoding="utf-8") as f:
-        f.write(new_source)
+    # Write back atomically: write to a temp file in the same directory, then
+    # os.replace() for an atomic swap. A crash, disk-full, or exception mid-write
+    # then can't truncate the original scene file (code_review.md #8).
+    dir_name = os.path.dirname(os.path.abspath(scene_path))
+    fd, tmp_path = tempfile.mkstemp(dir=dir_name, suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(new_source)
+        os.replace(tmp_path, scene_path)
+    except Exception:
+        try:
+            os.remove(tmp_path)
+        except OSError:
+            pass
+        raise
 
     return {"success": True, "message": f"Updated {field_name} for object {object_name}"}

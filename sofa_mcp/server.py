@@ -44,12 +44,6 @@ def _log_server_event(level: str, message: str) -> None:
 mcp = FastMCP("SOFA MCP")
 
 @mcp.tool()
-def health_check() -> dict:
-    """Returns the server status and initialization state."""
-    return {"status": "ready", "version": "1.0.0"}
-
-
-@mcp.tool()
 def server_status(log_tail: int = 20) -> dict:
     """Returns server uptime, plugin-cache freshness, and recent log lines.
 
@@ -82,6 +76,7 @@ def server_status(log_tail: int = 20) -> dict:
 
     return {
         "status": "ok",
+        "version": "1.0.0",
         "uptime_seconds": int(time.time() - _SERVER_START_TIME),
         "log_path": _SERVER_LOG_PATH,
         "log_tail": log_lines,
@@ -170,30 +165,12 @@ def summarize_scene(script_content: str, verbose: bool = False) -> dict:
 
 
 @mcp.tool()
-def write_scene(script_content: str, output_filename: str) -> dict:
-    """Writes a generated SOFA scene file to disk without running validation."""
-    return scene_writer.write_scene(script_content, output_filename)
-
-
-@mcp.tool()
 def write_and_test_scene(script_content: str, output_filename: str) -> dict:
     """
     Drafts, dry-runs, and auto-corrects a SOFA scene.
     It returns success if the scene initializes and animates one step (dt=0.01).
     """
     return scene_writer.write_and_test_scene(script_content, output_filename)
-
-
-@mcp.tool()
-def load_scene(scene_path: str) -> dict:
-    """Loads an existing scene file from disk and returns its contents."""
-    return scene_writer.load_scene(scene_path)
-
-
-@mcp.tool()
-def patch_scene(scene_path: str, patch: dict) -> dict:
-    """Applies a structured text patch to an existing scene file."""
-    return scene_writer.patch_scene(scene_path, patch)
 
 
 @mcp.tool()
@@ -205,12 +182,6 @@ def generate_volume_mesh(
 ) -> dict:
     """Converts a surface STL file into a volumetric VTK mesh using GMSH. Output is loadable by SOFA's MeshVTKLoader."""
     return mesh_generator.generate_volume_mesh(stl_path, output_path, mesh_size_factor, remove_duplicates)
-
-
-@mcp.tool()
-def resolve_asset_path(path: str) -> dict:
-    """Resolves an asset path (~ expansion + absolute path) and checks existence."""
-    return mesh_inspector.resolve_asset_path(path)
 
 
 @mcp.tool()

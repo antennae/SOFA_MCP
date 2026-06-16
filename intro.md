@@ -43,14 +43,16 @@ SOFA Runtime  +  meshes/  +  generated scene scripts
 ```
 
 ---
-# MCP Tools — 19 Total
+# MCP Tools — 17 Total
 
 | Category | Tools |
 |----------|-------|
-| Scene management | `validate_scene`, `summarize_scene`, `write_scene`, `write_and_test_scene`, `load_scene`, `patch_scene` |
-| Mesh / geometry | `mesh_stats`, `find_indices_by_region`, `resolve_asset_path`, `generate_volume_mesh` |
+| Scene authoring | `validate_scene`, `summarize_scene`, `write_and_test_scene`, `update_data_field` |
+| Mesh / geometry | `mesh_stats`, `find_indices_by_region`, `generate_volume_mesh` |
 | Component discovery | `query_sofa_component`, `search_sofa_components`, `get_plugins_for_components` |
-| Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `health_check` |
+| Simulation | `run_and_extract`, `process_simulation_data`, `render_scene_snapshot` |
+| Diagnostics | `diagnose_scene`, `enable_logs_and_run`, `perturb_and_run` |
+| Misc | `server_status` |
 
 ---
 # Core Workflow

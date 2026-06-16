@@ -61,7 +61,7 @@ The agent goes through roughly these tool calls:
 2. **`get_plugins_for_components`** to resolve their required plugins in one batch.
 3. The agent writes the `createScene(root)` body, gathering all `RequiredPlugin` calls at the top.
 4. **`validate_scene`** confirms the scene initializes and animates one step.
-5. **`write_scene`** saves it to [`archiv/tri_leg_cables.py`](./archiv/tri_leg_cables.py).
+5. **`write_and_test_scene`** re-validates and saves it to [`archiv/tri_leg_cables.py`](./archiv/tri_leg_cables.py).
 6. **`render_scene_snapshot`** runs the simulation for 150 steps and renders the final state:
 
 ![Three colored legs bending asymmetrically toward a common point](archiv/assets/tri_leg_cables_snapshot.png)
@@ -72,14 +72,14 @@ The cables in the rendered scene contract by 22mm, 12mm, and 5mm — asymmetric 
 
 | Category | Tools | Purpose |
 |---|---|---|
-| Scene authoring | `validate_scene`, `summarize_scene`, `write_scene`, `write_and_test_scene`, `load_scene`, `patch_scene` | Generate, validate, save, and patch SOFA scene files |
+| Scene authoring | `validate_scene`, `summarize_scene`, `write_and_test_scene`, `update_data_field` | Generate, validate, save, and patch SOFA scene files |
 | Component lookup | `query_sofa_component`, `search_sofa_components`, `get_plugins_for_components` | Find components in the registry; resolve their plugins. `query_sofa_component` is template-aware and returns the registered template list + source header. |
-| Mesh | `mesh_stats`, `find_indices_by_region`, `resolve_asset_path`, `generate_volume_mesh` | Inspect meshes; convert STL surfaces to volumetric VTK via gmsh |
-| Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `render_scene_snapshot` | Run scenes, extract data, render final-frame snapshots |
+| Mesh | `mesh_stats`, `find_indices_by_region`, `generate_volume_mesh` | Inspect meshes; convert STL surfaces to volumetric VTK via gmsh |
+| Simulation | `run_and_extract`, `process_simulation_data`, `render_scene_snapshot` | Run scenes, extract data, render final-frame snapshots |
 | Diagnostics | `diagnose_scene`, `enable_logs_and_run`, `perturb_and_run` | Smell-test a scene over N steps (NaN, divergence, QP infeasibility, ...); capture component logs; perturb a Data field and re-run to test a hypothesis |
-| Misc | `health_check` | Server liveness |
+| Misc | `server_status` | Server status, uptime, plugin-cache freshness, recent log lines |
 
-21 tools total. Full schemas are exposed via MCP `tools/list`; per-tool documentation lives in [`skills/sofa-mcp/sofa-mcp/SKILL.md`](skills/sofa-mcp/sofa-mcp/SKILL.md).
+17 tools total. Full schemas are exposed via MCP `tools/list`; per-tool documentation lives in [`skills/sofa-mcp/sofa-mcp/SKILL.md`](skills/sofa-mcp/sofa-mcp/SKILL.md).
 
 ## Architecture
 

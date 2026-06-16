@@ -86,7 +86,7 @@ Pick one hypothesis. Modify the scene **minimally** to test it:
 - **Suspect units mismatch?** `perturb_and_run(scene, {"/path/to/ff": {"youngModulus": old/1000}}, steps=N)` (or multiply gravity). See which scales the result toward expected.
 - **Suspect a mapping?** `enable_logs_and_run(scene, log_targets=["BarycentricMapping"], steps=5)` to see what the mapping binds to at init time.
 
-Use `patch_scene` to apply the minimal change, then `run_and_extract` again. Compare to the previous trajectory. The change in behavior **falsifies or confirms** the hypothesis far more reliably than reading the source.
+Use `update_data_field` to apply the minimal change, then `run_and_extract` again. Compare to the previous trajectory. The change in behavior **falsifies or confirms** the hypothesis far more reliably than reading the source.
 
 ### Step 6 — Render at key moments
 
@@ -108,7 +108,7 @@ User: "I added a `CableConstraint` to my soft leg with `value=20`, but the tip b
 2. `diagnose_scene(scene, steps=20, dt=0.01)` returns: rule_5 OK, GCC confirmed in subtree; `max_displacement_per_mo = {"/Leg_0/mo": 0.4}`; `extents_per_mo = {"/Leg_0/mo": 100.0}`. No smell-test slugs fire (ratio 0.004 — well below `excessive_displacement` warn threshold). Rule 9 is `ok` because `youngModulus=5000` and `gravity=[0,0,-9810]` both fall inside their per-unit-system tolerances when read individually.
 3. Hypothesis: cable indices don't reach the tip — `tip_indices=[40,41,42,43]` may not be the top of the grid. `find_indices_by_region(mesh, region_box=[top of leg])` returns `[40,41,42,43]` — they ARE the tip. Falsified.
 4. New hypothesis: units mismatch. Gravity is `-9810` (mm/g/s) but `youngModulus=5000` reads as 5 kPa in either unit system — for an mm/g/s scene the scale should be 5e6 (rubber). Rule 9's per-field check missed it because the magnitudes happened to land in their independent allowed ranges.
-5. `patch_scene` to set `youngModulus=5e6`. Re-run `diagnose_scene` — `max_displacement_per_mo = {"/Leg_0/mo": 12.4}`. Hypothesis confirmed.
+5. `update_data_field` to set `youngModulus=5e6`. Re-run `diagnose_scene` — `max_displacement_per_mo = {"/Leg_0/mo": 12.4}`. Hypothesis confirmed.
 6. `render_scene_snapshot` before/after — show the user.
 
 The bug was units. The sanity report's raw `extents_per_mo`/`max_displacement_per_mo` numbers (visible alongside the `ok` rules) made the magnitude problem obvious in one tool call.

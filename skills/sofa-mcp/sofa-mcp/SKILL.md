@@ -28,7 +28,7 @@ When the user says "I want a SOFA scene that ...":
 4. **Write `createScene(rootNode)`.** Group all `RequiredPlugin` calls at the top. Apply the Scene Health Rules below.
 5. **Self-check via summarize.** Call `summarize_scene(script_content)`. Read the `checks` field and the `nodes`/`objects` arrays. If anything in the Health Rules is missing, fix the draft before validating.
 6. **Validate.** Call `validate_scene(script_content)` for a real init + animate-one-step dry run. On failure, read the traceback alongside the scene summary and fix. The response carries `init_warnings: [{pattern, line}]` when SOFA emits structural warnings during init (constraint silently removed, invalid linear system, mesh file missing, zero-size mstate) — these flip `success: false` even though the subprocess exited 0. Treat them as hard failures, not info.
-7. **Write.** Call `write_and_test_scene(script_content, output_filename)` rather than `write_scene` + `validate_scene` separately — it runs validation with the subprocess `cwd` set to the eventual scene directory, so `__file__`-relative mesh loaders (`MeshVTKLoader(filename=os.path.join(os.path.dirname(__file__), "mesh.vtk"))`) resolve identically under validation and `runSofa`.
+7. **Write.** Call `write_and_test_scene(script_content, output_filename)` rather than writing the file yourself and validating separately — it runs validation with the subprocess `cwd` set to the eventual scene directory, so `__file__`-relative mesh loaders (`MeshVTKLoader(filename=os.path.join(os.path.dirname(__file__), "mesh.vtk"))`) resolve identically under validation and `runSofa`.
 
 **For mesh-driven scenes:** before step 4, if the user has an STL but the FEM/topology you're planning needs tetrahedra, call `generate_volume_mesh(stl_path)` first. Use `mesh_stats` to learn the bounding box and element counts. Use `find_indices_by_region` to identify boundary or tip vertex indices for fixing/actuating.
 
@@ -93,13 +93,13 @@ Full schemas are exposed via the MCP `tools/list` endpoint. Quick reference by c
 
 | Category | Tools |
 |---|---|
-| Scene authoring | `validate_scene`, `summarize_scene`, `write_scene`, `write_and_test_scene`, `load_scene`, `patch_scene` |
+| Scene authoring | `validate_scene`, `summarize_scene`, `write_and_test_scene`, `update_data_field` (semantic field patch of an existing scene) |
 | Component lookup | `query_sofa_component`, `search_sofa_components`, `get_plugins_for_components` |
-| Mesh | `mesh_stats`, `find_indices_by_region`, `resolve_asset_path`, `generate_volume_mesh` |
-| Simulation | `run_and_extract`, `process_simulation_data`, `update_data_field`, `render_scene_snapshot` |
+| Mesh | `mesh_stats`, `find_indices_by_region`, `generate_volume_mesh` |
+| Simulation | `run_and_extract`, `process_simulation_data`, `render_scene_snapshot` |
 | Diagnose | `diagnose_scene` (sanity report: Health Rules + runtime smell tests + per-MO metrics + truncated logs) |
 | Probes | `enable_logs_and_run` (toggle printLog on targets, animate, capture filtered logs), `perturb_and_run` (apply Data-field overrides before init, animate, return per-MO metrics) |
-| Misc | `health_check` |
+| Misc | `server_status` (uptime, plugin-cache freshness, recent log lines) |
 
 For raw HTTP/curl debugging (rarely needed — agents use the MCP transport directly), see `references/curl-examples.md`.
 
