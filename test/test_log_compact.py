@@ -22,8 +22,11 @@ class TestCompactLog(unittest.TestCase):
         noise = ["[INFO] [EulerImplicitSolver(odesolver)] initial f = [1, 2, 3]"] * 100
         text = "\n".join(noise)
         out, dropped = compact_log(text, tail_lines=20)
-        self.assertEqual(out.count("\n"), 19)  # 20 lines, 19 internal newlines
-        self.assertEqual(dropped, 80)
+        # The 20 identical tail lines fold into a single annotated line.
+        self.assertEqual(out.count("\n"), 0)
+        self.assertIn("(×20)", out)
+        # dropped now counts the 80 noise lines + 19 folded duplicates.
+        self.assertEqual(dropped, 99)
 
     def test_allowlist_hits_kept_with_tail(self):
         lines = []
@@ -152,6 +155,28 @@ class TestCompactLog(unittest.TestCase):
         text = "\n".join(body)  # no trailing newline
         out, _ = compact_log(text, tail_lines=5)
         self.assertFalse(out.endswith("\n"))
+
+    def test_collapses_consecutive_identical_kept_lines(self):
+        # The feedback case: ~70 identical "Convergence after N iterations" lines
+        # bury the real signal. A run of identical kept lines collapses to one
+        # annotated line; the distinct trailing signal survives verbatim.
+        lines = ["Convergence after 2 iterations"] * 70
+        lines.append("No convergence: error = nan")  # the real signal, last line
+        text = "\n".join(lines)
+        out, dropped = compact_log(text, tail_lines=5)
+        self.assertEqual(out.count("Convergence after 2 iterations"), 1)
+        self.assertIn("(×70)", out)
+        self.assertIn("No convergence: error = nan", out)
+
+    def test_distinct_repeats_not_merged(self):
+        # Two runs that differ only in their number must NOT be merged — a
+        # cap-hit count is signal, not noise.
+        lines = ["Convergence after 2 iterations"] * 40
+        lines += ["Convergence after 100 iterations"] * 5
+        text = "\n".join(lines)
+        out, _ = compact_log(text, tail_lines=5)
+        self.assertIn("Convergence after 2 iterations (×40)", out)
+        self.assertIn("Convergence after 100 iterations (×5)", out)
 
     def test_dropped_count_accurate(self):
         # 100 noise lines, 1 signal, tail=5. Kept = 1 signal + 5 tail = 6

@@ -378,9 +378,17 @@ def check_rule_6_forcefield_mapping(root):
             cls = _safe_class_name(obj)
             if not cls.endswith("ForceField"):
                 continue
-            # Pair-interaction Data fields and Link fields named object1/object2 both exempt.
+            # Exempt force fields whose mechanical state is wired explicitly,
+            # since SOFA then binds the MO regardless of node position:
+            #   - object1/object2 (pair/mixed-interaction force fields), and
+            #   - mstate (single-state force fields, e.g. RestShapeSpringsForceField
+            #     pinned to a MO in a sibling subtree).
+            # At summarize time (pre-init) these links are populated only when set
+            # explicitly in the scene, so this does not mask a genuinely MO-less FF
+            # (SOFA refuses to construct one of those, failing summarize outright).
             if (_data_value(obj, "object1") or _data_value(obj, "object2")
-                    or _link_value_string(obj, "object1") or _link_value_string(obj, "object2")):
+                    or _link_value_string(obj, "object1") or _link_value_string(obj, "object2")
+                    or _link_value_string(obj, "mstate")):
                 continue
             # Walk ancestors (including self) for a MechanicalObject.
             found_mo = False

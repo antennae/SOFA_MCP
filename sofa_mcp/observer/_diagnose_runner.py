@@ -417,6 +417,7 @@ def _empty_payload():
         "solver_iterations": {},
         "solver_max_iterations": {},
         "objective_series": {},
+        "displacement_series": {},
         "structural_anomalies": [],
         "printLog_activated": [],
         "plugin_cache_empty": False,
@@ -471,6 +472,11 @@ def _run(scene_path, steps, dt, payload):
 
     max_displacement = {path: 0.0 for path, _ in mos}
     max_force = {path: 0.0 for path, _ in mos}
+    # Per-step trajectory of max displacement per MO. `None` marks a step where
+    # the MO went non-finite (NaN/inf), so the series pinpoints the blowup step
+    # rather than just its peak. Length always equals `steps`.
+    displacement_series = {path: [] for path, _ in mos}
+    payload["displacement_series"] = displacement_series
     metrics = payload["metrics"]
     metrics["max_displacement_per_mo"] = max_displacement
     metrics["max_force_per_mo"] = max_force
@@ -483,8 +489,10 @@ def _run(scene_path, steps, dt, payload):
             if _has_nan_or_inf(pos) or _has_nan_or_inf(force):
                 if metrics["nan_first_step"] is None:
                     metrics["nan_first_step"] = step_idx
+                displacement_series[path].append(None)
                 continue
             disp = _displacement_max(pos, initial_positions.get(path, []))
+            displacement_series[path].append(disp if math.isfinite(disp) else None)
             if disp > max_displacement[path]:
                 max_displacement[path] = disp
             fmag = _row_max_norm(force)

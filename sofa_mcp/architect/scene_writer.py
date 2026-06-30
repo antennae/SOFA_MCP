@@ -333,7 +333,8 @@ def validate_scene(
 
 
 def summarize_scene(
-    script_content: str, *, timeout_s: int = 30, verbose: bool = False
+    script_content: str, *, timeout_s: int = 30, verbose: bool = False,
+    env: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """Builds the scene graph and returns a structured summary + basic rule checks.
 
@@ -344,10 +345,17 @@ def summarize_scene(
     the shared allowlist + tail-anchor filter. The success path returns
     only the parsed `SCENE_SUMMARY_JSON:` payload, so stdout never reaches
     the caller and `verbose` has no effect.
+
+    `env`, when given, is merged over the current environment for the scene
+    subprocess (not replacing it — SOFA_ROOT/PYTHONPATH must survive). Lets a
+    caller summarize a scene variant selected by an env var.
     """
     from sofa_mcp._log_compact import compact_log
 
     python_path = os.path.expanduser("~/venv/bin/python")
+    subprocess_env = (
+        {**os.environ, **{str(k): str(v) for k, v in env.items()}} if env else None
+    )
     create_scene_function = _build_scene_source(script_content)
     summary_wrapper = _build_summary_wrapper(create_scene_function)
 
@@ -370,6 +378,7 @@ def summarize_scene(
             capture_output=True,
             text=True,
             timeout=timeout_s,
+            env=subprocess_env,
         )
 
         if result.returncode != 0:

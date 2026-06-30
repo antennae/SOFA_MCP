@@ -308,11 +308,13 @@ def createScene(rootNode):
 def test_rule_6_pair_interaction_exempt():
     """Pair-interaction force fields with object1/object2 set are exempt from Rule 6.
 
-    Note: Rule 6's "ForceField without MechanicalObject in ancestor chain" trigger is preempted
-    at SOFA's factory level — SOFA refuses to construct such an FF, so the static check would
-    only ever fire if SOFA's runtime check were bypassed (in practice: never). The rule's
-    real testable value is the exemption logic for pair/mixed-interaction force fields, which
-    is what this test exercises.
+    Note: Rule 6's error branch fires only for force fields that SOFA *did*
+    construct (createScene succeeded) yet whose mechanical state isn't reachable
+    by walking ancestor nodes. A force field with no findable MO at all can't get
+    that far — SOFA refuses to construct it, so summarize fails first. The branch
+    therefore only ever sees explicitly-wired force fields (object1/object2 or
+    mstate links to a MO outside the ancestor chain), which is exactly what the
+    exemption logic must skip. See test_rule_6_explicit_mstate_link_exempt.
     """
     plugins = list(P_BASE) + ["Sofa.Component.SolidMechanics.Spring"]
     script = f'''
@@ -338,6 +340,65 @@ def createScene(rootNode):
     checks = _checks(_summarize(script))
     rule_6_errors = [c for c in checks if c["rule"] == "rule_6_forcefield_mapping" and c["severity"] == "error"]
     assert not rule_6_errors, f"Pair-interaction FF false-positive: {rule_6_errors}"
+
+
+def test_rule_6_ff_in_child_mo_in_parent_implicit():
+    """Ancestor-walk branch: a ForceField in a CHILD node resolves to a
+    MechanicalObject in the PARENT via context search (no explicit link). Must
+    be ok. Guards the ancestor walk — previously only the same-node case was
+    covered, so this branch shipped untested (see feedback_2026-06-19).
+    """
+    plugins = list(P_BASE) + ["Sofa.Component.SolidMechanics.Spring"]
+    script = f'''
+def createScene(rootNode):
+    rootNode.gravity = [0, -9.81, 0]
+    {_plugins_block(plugins)}
+    rootNode.addObject("DefaultAnimationLoop")
+    Trunk = rootNode.addChild("Trunk")
+    Trunk.addObject("EulerImplicitSolver")
+    Trunk.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixMat3x3d")
+    Trunk.addObject("RegularGridTopology", n=[3,3,3], min=[0,0,0], max=[10,10,10])
+    Trunk.addObject("MechanicalObject", name="mo", template="Vec3d")
+    Trunk.addObject("UniformMass", totalMass=1.0)
+    Trunk.addObject("HexahedronFEMForceField", youngModulus=1000, poissonRatio=0.3)
+    fixed = Trunk.addChild("fixed")
+    fixed.addObject("RestShapeSpringsForceField", points=[0,1,2], stiffness=1e12)
+'''
+    checks = _checks(_summarize(script))
+    rule_6_errors = [c for c in checks if c["rule"] == "rule_6_forcefield_mapping" and c["severity"] == "error"]
+    assert not rule_6_errors, f"Ancestor-walk false-positive: {rule_6_errors}"
+
+
+def test_rule_6_explicit_mstate_link_exempt():
+    """Regression for feedback_2026-06-19: a ForceField wired to its MO via an
+    explicit `mstate` link, where the MO lives in a sibling subtree (NOT in the
+    ancestor chain), is correctly constructed by SOFA and must NOT trigger Rule
+    6. Before the fix, rule_6 only exempted object1/object2 and false-positived
+    on single-link wiring.
+
+    Note a true-positive (FF with no findable MO at all) cannot be exercised
+    here: SOFA refuses to construct such a force field, so createScene raises
+    and the static check never runs.
+    """
+    plugins = list(P_BASE) + ["Sofa.Component.SolidMechanics.Spring"]
+    script = f'''
+def createScene(rootNode):
+    rootNode.gravity = [0, -9.81, 0]
+    {_plugins_block(plugins)}
+    rootNode.addObject("DefaultAnimationLoop")
+    holder = rootNode.addChild("holder")
+    holder.addObject("EulerImplicitSolver")
+    holder.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixMat3x3d")
+    holder.addObject("RegularGridTopology", n=[3,3,3], min=[0,0,0], max=[10,10,10])
+    holder.addObject("MechanicalObject", name="mo", template="Vec3d")
+    holder.addObject("UniformMass", totalMass=1.0)
+    springs = rootNode.addChild("springs")
+    springs.addObject("RestShapeSpringsForceField",
+                      mstate="@/holder/mo", points=[0,1,2], stiffness=1e12)
+'''
+    checks = _checks(_summarize(script))
+    rule_6_errors = [c for c in checks if c["rule"] == "rule_6_forcefield_mapping" and c["severity"] == "error"]
+    assert not rule_6_errors, f"Explicit-mstate false-positive: {rule_6_errors}"
 
 
 # =============================================================================

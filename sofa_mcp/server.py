@@ -244,12 +244,15 @@ def diagnose_scene(
     steps: int = 50,
     dt: float = 0.01,
     verbose: bool = False,
+    env: dict = None,
 ) -> dict:
     """Runs a sanity report for a SOFA scene: structural anomalies (Health Rules) plus per-step metrics (max displacement, max force, NaN-first-step) on every unmapped MechanicalObject. `complaint` is accepted for forward-compat and currently unused.
 
+    `env` (optional) is a dict of environment-variable overrides merged over the server's environment for the scene subprocesses — use it to diagnose a scene variant chosen by an env var (e.g. `{"TRUNK_HYPER_MATERIAL": "MooneyRivlin"}`) without editing the scene file.
+
     `verbose=False` (default) compacts `solver_logs` to plugin loads, convergence summaries, errors, warnings, and tracebacks. The response carries `log_lines_dropped: int` when filtering happened. Set `verbose=True` for the full captured log (still subject to head/tail char-budget truncation).
     """
-    return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt, verbose=verbose)
+    return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt, verbose=verbose, env=env)
 
 
 @mcp.tool()

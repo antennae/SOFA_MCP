@@ -48,6 +48,28 @@ def _is_signal(line: str) -> bool:
     return any(pat.search(line) for pat in _KEEP_PATTERNS)
 
 
+def _collapse_runs(lines):
+    """Fold maximal runs of identical consecutive lines into one line annotated
+    with the run length.
+
+    Collapsing is byte-exact (not number-normalized) on purpose: SOFA emits
+    one "Convergence after N iterations" line per step, so a long run of the
+    *same* line is pure noise, but a line that differs in N (e.g. a cap-hit at
+    N=100 after a run of N=2) is signal and must stay distinct.
+    """
+    collapsed = []
+    i = 0
+    m = len(lines)
+    while i < m:
+        j = i + 1
+        while j < m and lines[j] == lines[i]:
+            j += 1
+        run = j - i
+        collapsed.append(f"{lines[i]} (×{run})" if run > 1 else lines[i])
+        i = j
+    return collapsed
+
+
 def compact_log(text: str, *, tail_lines: int = 20) -> Tuple[str, int]:
     """Filter `text` to a compact subset; return (filtered_text, dropped).
 
@@ -89,6 +111,10 @@ def compact_log(text: str, *, tail_lines: int = 20) -> Tuple[str, int]:
         keep[i] = True
 
     kept_lines = [lines[i] for i in range(n) if keep[i]]
+    kept_lines = _collapse_runs(kept_lines)
+    # `dropped` counts every original line not shown on its own output line:
+    # allowlist-dropped noise plus duplicates folded into a (×N) annotation.
+    # The invariant output_lines + dropped == n holds by construction.
     dropped = n - len(kept_lines)
 
     out = "\n".join(kept_lines)

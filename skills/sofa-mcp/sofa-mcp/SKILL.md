@@ -38,7 +38,7 @@ When the user says "I want a SOFA scene that ...":
 
 When the user says "this scene runs but the behavior is wrong" (robot doesn't move, deformation too small, things pass through, position explodes), this is a **behavioral bug**, not an authoring bug. There's no traceback; the scene is physically wrong.
 
-The loop is: **symptom → sanity report → run + measure → hypothesis → modify minimally → re-measure**. Start with `diagnose_scene(scene_path, steps=N)` — it folds the 9 Health Rules and runtime smell tests (`excessive_displacement`, `solver_iter_cap_hit`, `inverse_objective_not_decreasing`, `qp_infeasible_in_log`, `multimapping_node_has_solver`) into one response with per-MO metrics and captured solver logs. Don't recommend a fix without running the modified scene to falsify or confirm.
+The loop is: **symptom → sanity report → run + measure → hypothesis → modify minimally → re-measure**. Start with `diagnose_scene(scene_path, steps=N)` — it folds the 9 Health Rules and runtime smell tests (`excessive_displacement`, `solver_iter_cap_hit`, `inverse_objective_not_decreasing`, `qp_infeasible_in_log`, `multimapping_node_has_solver`) into one response with per-MO metrics and captured solver logs. Don't recommend a fix without running the modified scene to falsify or confirm. If the scene picks a variant from an environment variable (e.g. a material switch), pass `env={"VAR": "value"}` to diagnose that variant without editing the file — overrides are merged over the server environment.
 
 For the full investigative procedure, the symptom-to-hypothesis table, and a worked example, read `references/debugging-playbook.md`.
 
@@ -71,7 +71,7 @@ Agent-facing summary of what makes a SOFA scene physically well-formed. When the
    - **Constraint solver** at root: `NNCGConstraintSolver` for forward simulation, `QPInverseProblemSolver` for any inverse-problem scene (any class from the `SoftRobots.Inverse` plugin requires `QPInverseProblemSolver`).
    - **Constraint correction** in each deformable subtree: `GenericConstraintCorrection` is the safe default.
 
-6. **ForceField Mapping.** Every `ForceField` must reach a `MechanicalObject`. Most force fields look up the `MechanicalObject` in their ancestor chain; pair/mixed-interaction force fields (e.g. `SpringForceField`, `JointSpringForceField`) instead reference two MOs explicitly via `object1`/`object2` Data fields, which may live in different subtrees.
+6. **ForceField Mapping.** Every `ForceField` must reach a `MechanicalObject`. Most force fields look up the `MechanicalObject` in their ancestor chain; some bind it explicitly instead — pair/mixed-interaction force fields via `object1`/`object2` (two MOs), single-state force fields (e.g. `RestShapeSpringsForceField`) via an `mstate` link — and the target may live in a different subtree.
 
 7. **Topology Containers.** Volumetric force fields (e.g. `TetrahedronFEMForceField`) need a volumetric topology container or mesh. `BarycentricMapping`'s parent must be volumetric — except when the parent has a shell FEM like `TriangularFEMForceField` or `QuadBendingFEMForceField`.
 

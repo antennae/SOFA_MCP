@@ -115,6 +115,57 @@ def test_m5_missing_collision_rule_8_error():
     )
 
 
+def test_diagnose_emits_per_step_displacement_series():
+    """diagnose_scene returns a per-step `displacement_series` per unmapped MO,
+    one entry per step. It must be consistent with the existing scalar peak:
+    the max finite entry equals `max_displacement_per_mo`. This is the
+    trajectory the agent previously had to track by hand to see 'flat then
+    spike' blowups (feedback_2026-06-19).
+    """
+    fixture = os.path.join(FIXTURES_DIR, "env_marker.py")
+    result = diagnostics.diagnose_scene(fixture, steps=3, dt=0.01)
+    assert result["success"] is True, f"diagnose failed: {result.get('error')}"
+
+    series = result["displacement_series"]
+    disps = result["metrics"]["max_displacement_per_mo"]
+    assert series, "expected per-step displacement series"
+    for path, peak in disps.items():
+        assert path in series, f"no series for {path}"
+        s = series[path]
+        assert len(s) == 3, f"series length {len(s)} != steps (3)"
+        finite = [v for v in s if v is not None]
+        assert finite, f"series for {path} had no finite entries"
+        assert max(finite) == pytest.approx(peak), (
+            f"series peak {max(finite)} != scalar peak {peak} for {path}"
+        )
+
+
+def test_diagnose_env_override_reaches_subprocess():
+    """diagnose_scene(env=...) must reach the scene subprocess and be MERGED
+    over the parent environment (not replace it). The env_marker fixture adds
+    an extra child node only when SOFA_MCP_TEST_MARKER == "on", so node_count
+    distinguishes the two runs. The with-env run also succeeding proves the
+    merge preserved SOFA_ROOT/PYTHONPATH (else SOFA wouldn't import).
+    """
+    fixture = os.path.join(FIXTURES_DIR, "env_marker.py")
+    assert os.path.exists(fixture)
+
+    baseline = diagnostics.diagnose_scene(fixture, steps=2, dt=0.01)
+    assert baseline["success"] is True, f"baseline failed: {baseline.get('error')}"
+    base_nodes = baseline["scene_summary"]["node_count"]
+
+    overridden = diagnostics.diagnose_scene(
+        fixture, steps=2, dt=0.01, env={"SOFA_MCP_TEST_MARKER": "on"}
+    )
+    assert overridden["success"] is True, f"override run failed: {overridden.get('error')}"
+    over_nodes = overridden["scene_summary"]["node_count"]
+
+    assert over_nodes == base_nodes + 1, (
+        f"env override did not reach the subprocess: "
+        f"baseline node_count={base_nodes}, override node_count={over_nodes}"
+    )
+
+
 def test_m5_broken_mapping_rule_7_error():
     """Fixture 4: BarycentricMapping in a child node whose parent has
     only a bare MeshTopology (no filename Data, no loader sibling, no

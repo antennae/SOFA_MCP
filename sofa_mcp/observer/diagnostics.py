@@ -71,6 +71,7 @@ def _empty_step3_fields() -> Dict[str, Any]:
         "solver_iterations": {},
         "solver_max_iterations": {},
         "objective_series": {},
+        "displacement_series": {},
         "printLog_activated": [],
         "plugin_cache_empty": False,
     }
@@ -261,18 +262,31 @@ def _truncate_log(
     return head + sep + tail
 
 
-def _summarize_anomalies(content: str) -> Dict[str, Any]:
+def _summarize_anomalies(content: str, env: Dict[str, Any] = None) -> Dict[str, Any]:
     """Return {anomalies, summarize_error?}. Defensive against summarize_scene
     failure modes (timeout, runtime error) — the no-checks shape uses .get().
     """
     from sofa_mcp.architect import scene_writer
 
-    summary = scene_writer.summarize_scene(content, timeout_s=SUMMARIZE_TIMEOUT_S)
+    summary = scene_writer.summarize_scene(content, timeout_s=SUMMARIZE_TIMEOUT_S, env=env)
     anomalies = summary.get("checks") or []
     out: Dict[str, Any] = {"anomalies": anomalies}
     if not summary.get("success"):
         out["summarize_error"] = summary.get("error") or summary.get("message")
     return out
+
+
+def _merge_env(overrides: Dict[str, Any]) -> Dict[str, str]:
+    """Merge caller overrides over the current environment for a subprocess.
+
+    Returns None when there are no overrides so subprocess.run keeps inheriting
+    the parent environment verbatim. Merging (not replacing) is essential —
+    SOFA needs SOFA_ROOT / PYTHONPATH from the parent to import at all. Values
+    are coerced to str because subprocess env dicts reject non-string values.
+    """
+    if not overrides:
+        return None
+    return {**os.environ, **{str(k): str(v) for k, v in overrides.items()}}
 
 
 def diagnose_scene(
@@ -281,6 +295,7 @@ def diagnose_scene(
     steps: int = 50,
     dt: float = 0.01,
     verbose: bool = False,
+    env: Dict[str, Any] = None,
 ) -> Dict[str, Any]:
     """Run the diagnose-scene sanity report on a scene file.
 
@@ -290,6 +305,12 @@ def diagnose_scene(
             playbook will use it to bias which probe runs next).
         steps: Number of animation steps to run.
         dt: Time step.
+        env: Optional environment-variable overrides for the scene subprocess(es),
+            merged over the server's environment (not replacing it). Use this to
+            diagnose a scene variant selected by an env var (e.g.
+            {"TRUNK_HYPER_MATERIAL": "MooneyRivlin"}) without editing the scene.
+            Applied to both the summarize pass (structural anomalies) and the
+            runner (per-step metrics) so the diagnosed variant is consistent.
         verbose: When False (default), `solver_logs` is filtered through
             the shared allowlist + tail-anchor compaction; the response
             also carries `log_lines_dropped: int` when filter drops occur.
@@ -340,7 +361,9 @@ def diagnose_scene(
             **_empty_step3_fields(),
         }
 
-    summary_part = _summarize_anomalies(content)
+    merged_env = _merge_env(env)
+
+    summary_part = _summarize_anomalies(content, env=env)
     anomalies = summary_part["anomalies"]
 
     # Tempfile created with delete=False so the runner subprocess can write to it
@@ -357,6 +380,7 @@ def diagnose_scene(
                 encoding="utf-8",
                 errors="replace",
                 timeout=RUNNER_TIMEOUT_S,
+                env=merged_env,
             )
         except subprocess.TimeoutExpired as exc:
             captured = ""
@@ -447,6 +471,7 @@ def diagnose_scene(
                 "solver_iterations": payload.get("solver_iterations") or {},
                 "solver_max_iterations": payload.get("solver_max_iterations") or {},
                 "objective_series": payload.get("objective_series") or {},
+                "displacement_series": payload.get("displacement_series") or {},
                 "printLog_activated": payload.get("printLog_activated") or [],
                 "plugin_cache_empty": payload.get("plugin_cache_empty", False),
             }
@@ -465,6 +490,7 @@ def diagnose_scene(
             "solver_iterations": payload.get("solver_iterations") or {},
             "solver_max_iterations": payload.get("solver_max_iterations") or {},
             "objective_series": payload.get("objective_series") or {},
+            "displacement_series": payload.get("displacement_series") or {},
             "printLog_activated": payload.get("printLog_activated") or [],
             "plugin_cache_empty": payload.get("plugin_cache_empty", False),
         }
