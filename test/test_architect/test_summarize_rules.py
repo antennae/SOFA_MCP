@@ -369,6 +369,53 @@ def createScene(rootNode):
     assert not rule_6_errors, f"Ancestor-walk false-positive: {rule_6_errors}"
 
 
+def test_rule_6_leaf_child_among_many_siblings_reporter_shape():
+    """Regression for the 2026-07-10 trunk_hyper report. Mirrors the reporter's
+    tree: a Trunk node with a MO and several LEAF children (visual model,
+    cables) before/after a `fixed` leaf holding BoxROI +
+    RestShapeSpringsForceField with a `points` link and NO mstate.
+
+    The pre-fix ancestor walk keyed its parent map by Python id() of transient
+    SofaPython3 node wrappers; leaf wrappers are dropped after the map build,
+    so on a second traversal every leaf missed its parent and rule_6 saw a
+    one-node chain. test_rule_6_ff_in_child_mo_in_parent_implicit passed only
+    because id reuse happened to line up on that tiny tree.
+    """
+    plugins = list(P_BASE) + [
+        "Sofa.Component.SolidMechanics.Spring",
+        "Sofa.Component.Engine.Select",
+        "Sofa.Component.Mapping.Linear",
+        "Sofa.GL.Component.Rendering3D",
+    ]
+    script = f'''
+def createScene(rootNode):
+    rootNode.gravity = [0, -9.81, 0]
+    {_plugins_block(plugins)}
+    rootNode.addObject("DefaultAnimationLoop")
+    Trunk = rootNode.addChild("Trunk")
+    Trunk.addObject("EulerImplicitSolver")
+    Trunk.addObject("SparseLDLSolver", template="CompressedRowSparseMatrixMat3x3d")
+    Trunk.addObject("RegularGridTopology", n=[3,3,3], min=[0,0,0], max=[10,10,10])
+    Trunk.addObject("MechanicalObject", name="mo", template="Vec3d")
+    Trunk.addObject("UniformMass", totalMass=1.0)
+    Trunk.addObject("HexahedronFEMForceField", youngModulus=1000, poissonRatio=0.3)
+    visu = Trunk.addChild("VisualModel")
+    visu.addObject("OglModel", name="renderer")
+    visu.addObject("BarycentricMapping")
+    fixed = Trunk.addChild("fixed")
+    fixed.addObject("BoxROI", name="box", box=[-1,-1,-1,11,11,1])
+    fixed.addObject("RestShapeSpringsForceField", name="anchor",
+                    stiffness=1e12, points="@./box.indices")
+    for i in range(4):
+        c = Trunk.addChild(f"cable{{i}}")
+        c.addObject("MechanicalObject", name="cableMO", template="Vec3d", position=[[0,0,0]])
+        c.addObject("BarycentricMapping")
+'''
+    checks = _checks(_summarize(script))
+    rule_6_errors = [c for c in checks if c["rule"] == "rule_6_forcefield_mapping" and c["severity"] == "error"]
+    assert not rule_6_errors, f"Leaf-child ancestor-walk false-positive: {rule_6_errors}"
+
+
 def test_rule_6_explicit_mstate_link_exempt():
     """Regression for feedback_2026-06-19: a ForceField wired to its MO via an
     explicit `mstate` link, where the MO lives in a sibling subtree (NOT in the

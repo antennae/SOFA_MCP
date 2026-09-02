@@ -104,14 +104,30 @@ def _tree_classes(node):
     return seen
 
 
+def _node_key(node):
+    """Stable identity for a node across traversals.
+
+    SofaPython3 hands out a fresh Python wrapper for a node on every
+    `children` access once the previous wrapper is garbage-collected, so
+    `id(node)` is NOT stable: keying a map by it silently loses every leaf
+    (their wrappers die right after the map is built), which is how the
+    2026-07-10 rule_6 false positive on `/root/Trunk/fixed` arose. The scene
+    path name is stable for the life of the graph.
+    """
+    try:
+        return node.getPathName()
+    except Exception:
+        return id(node)
+
+
 def _build_parent_map(root):
-    """Map child node id → parent node (None for root)."""
-    parents = {id(root): None}
+    """Map node path → parent node (None for root)."""
+    parents = {_node_key(root): None}
     stack = [root]
     while stack:
         n = stack.pop()
         for c in getattr(n, "children", []):
-            parents[id(c)] = n
+            parents[_node_key(c)] = n
             stack.append(c)
     return parents
 
@@ -120,7 +136,7 @@ def _ancestors(node, parent_map):
     cur = node
     while cur is not None:
         yield cur
-        cur = parent_map.get(id(cur))
+        cur = parent_map.get(_node_key(cur))
 
 
 def _plugin_of(class_name):
@@ -498,7 +514,7 @@ def check_rule_7_topology(root):
     for n, path in _iter_nodes(root):
         if not _node_has_class(n, "BarycentricMapping"):
             continue
-        parent = parent_map.get(id(n))
+        parent = parent_map.get(_node_key(n))
         if parent is None:
             continue
         if _node_is_volumetric(parent):
