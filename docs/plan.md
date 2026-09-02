@@ -31,7 +31,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 | 6.1 — Investigative debugging toolkit | ✅ done | Steps 1, 1.5, 2, 3, 4 done; Step 5 automated half done 2026-05-02; M5 passed 2026-05-02 by user dogfooding the toolkit in real authoring sessions |
 | 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5, #8 shipped (2026-04-30 / 2026-05-02); 3 of 8 still pending (low-severity #3, #6, #7) |
 | 6.4 — trunk_hyper feedback (June + July rounds) | ✅ done (tier 1) | June round shipped 2026-06-30; July round shipped 2026-09-03 (`timeout_s` on the three run tools, dt precedence documented, rule_6 clamp case already covered by test). #4 `min_element_volume` series still deferred |
-| 7 — FastMCP 4 + MCP Tasks | 🚧 step 1 done 2026-09-03 (fastmcp 4.0.2, 140/140 green, server_status round-trips via mcp 2.x client); steps 2-4 pending user gate | MCP spec 2026-07-28 + FastMCP 4.0 (2026-08-31) give a native submit-then-poll job mode via `@mcp.tool(task=True)`. Answers the July 10 timeout/async ask without a hand-written job table |
+| 7 — FastMCP 4 + MCP Tasks | ✅ code done 2026-09-03 (steps 1-4). M7 passed via the FastMCP client over HTTP: 400-step trunk_hyper as a task, result in ~10-15 s, no timeout. Claude Code-side confirmation still pending (needs `/mcp` reconnect after the server restart) | MCP spec 2026-07-28 + FastMCP 4.0 (2026-08-31) give a native submit-then-poll job mode via `@mcp.tool(task=True)`. Answers the July 10 timeout/async ask without a hand-written job table |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ deferred | M3 gate; deprioritized 2026-05-02 — beginner-install ergonomics, not portfolio-critical |
 | 6.2 — Inverse-problem authoring (no new tool) | ✅ done | code+docs shipped 2026-05-02 (tri_leg_inverse.py + SKILL section + references); M6 passed 2026-05-02 — user confirmed render shows three legs reaching three goals |
@@ -121,7 +121,7 @@ Two dogfooding rounds from the hyperelastic-trunk instability debug (`docs/feedb
 | # | Item | Severity | Status / plan |
 |---|---|---|---|
 | 1 | **Runner timeout** — a 400-step hyperelastic run timed out; no way to raise the budget, no job mode, no "still busy?" signal | **high** | ✅ Tier 1 shipped 2026-09-03 (`timeout_s` on all three run tools, commit `0eafd79`). Tier 2 = Phase 7. The wall is our own `RUNNER_TIMEOUT_S = 90` in `sofa_mcp/observer/diagnostics.py:40`, not the client (Claude Code's MCP call timeout defaults to ~28 h and auto-backgrounds calls >2 min). *Hypothesis, n=1: the reporter's timeout was this constant.* Tier 1: expose `timeout_s` (default 90) on `diagnose_scene`, `enable_logs_and_run`, `perturb_and_run`. Tier 2: Phase 7 |
-| 2 | **rule_6 false positive on clamp child node** — `RestShapeSpringsForceField` in a child node flagged "no MechanicalObject in its ancestor chain" | medium | ✅ Closed 2026-09-03 without a rule change: `test_rule_6_ff_in_child_mo_in_parent_implicit` encodes exactly this pattern and passes. *Hypothesis: the July report ran against a pre-2026-06-30 server.* Reopen with a repro scene if it recurs. The 2026-06-30 fix already exempts explicit `mstate` links and walks ancestors, so a parent-node MO should pass. Either the reporter ran a pre-fix server or the MO is in a sibling subtree. Needs a repro scene before touching the rule |
+| 2 | **rule_6 false positive on clamp child node** — `RestShapeSpringsForceField` in a child node flagged "no MechanicalObject in its ancestor chain" | medium | ✅ **Real bug, fixed 2026-09-03.** (The earlier same-day "already covered by test" closure was wrong: that test passed by luck.) Root cause: `_build_parent_map` keyed by Python `id()` of SofaPython3 node wrappers, which are transient; leaf wrappers die after the map build, so on the rules' second traversal every leaf lost its parent and the ancestor walk saw a one-node chain. Affected rules 3, 6, 7 (7B also had a direct `id()` lookup). Fix: key by `getPathName()`. Reproduced on the reporter's `trunkHyper.py`; regression test `test_rule_6_leaf_child_among_many_siblings_reporter_shape`. The 2026-06-30 fix already exempts explicit `mstate` links and walks ancestors, so a parent-node MO should pass. Either the reporter ran a pre-fix server or the MO is in a sibling subtree. Needs a repro scene before touching the rule |
 | 3 | **`dt` precedence undocumented** — argument vs `root.dt` set in `createScene` | low | ✅ Shipped 2026-09-03 (docstrings + SKILL.md). Fact: `_diagnose_runner.py` passes the `dt` argument straight to `Sofa.Simulation.animate`, so the argument wins. One-line doc fix in the tool docstring + SKILL.md |
 | 4 | **`min_element_volume` per-step series** (June round, friction #3b) | low | Deferred roadmap item; needs per-step element-volume computation from topology |
 
@@ -133,9 +133,9 @@ We are on FastMCP 3.0.2 / Python 3.12. The only 4.0 breaking change (server-init
 
 Steps:
 1. ✅ 2026-09-03 (`c82a20f`). `fastmcp = {version="^4.0", extras=["tasks"]}` → fastmcp 4.0.2 / mcp 2.1.1. No server change. One test-side fix (mcp 2.x client yields two streams). 140/140 green; `server_status` round-trips via the mcp 2.x client (17 tools). **Gate pending: user reconnects from a fresh Claude Code session (`/mcp`) and confirms.** Install gotcha: pip removed 3.0.2 after `fastmcp-slim` wrote the same paths → `pip install --force-reinstall --no-deps fastmcp-slim==4.0.2`.
-2. Wrap the three runner tools (`diagnose_scene`, `enable_logs_and_run`, `perturb_and_run`) as `async def` with `task=TaskConfig(mode="optional")`, subprocess call via `asyncio.to_thread`. Report progress via `Progress` per step block. Keep `timeout_s` from 6.4 #1 as the inner subprocess budget.
-3. Make `server_status` list running tasks (the extension keeps the task table; we surface it).
-4. Re-run the July 10 reporter's 400-step scene end to end. **Gate M7: the call returns a task handle and the result arrives without a timeout.**
+2. ✅ 2026-09-03 (`ab34a8f`). Three runner tools are `async def` with `task=TaskConfig(mode="optional")`, subprocess via `asyncio.to_thread`, coarse `Progress` messages (start/done; per-step progress would need the runner to stream, deferred).
+3. ✅ 2026-09-03. `server_status.runs_in_flight` is a server-side table (tool, scene_path, steps, timeout_s, started). Not `docket.snapshot()`: pydocket 0.24.1 memory:// raises `KeyError('message_id')` while a task is pending, and the table also covers the blocking path.
+4. ✅ M7 via FastMCP client over HTTP, 2026-09-03: `trunkHyper.py` 400 steps (NeoHookean and MooneyRivlin), task accepted in ~10 ms, visible in `runs_in_flight`, result in 10-15 s, `displacement_series` len 400, no NaN, no smells after the rule_6 fix. **Claude Code-side check pending.** Note: the run itself is fast here; why the reporter's hit 90 s is unknown (machine load or an earlier scene revision).
 
 Non-goal: a hand-written job table / polling tool. The extension is that.
 
@@ -170,7 +170,7 @@ Passed via real-world dogfooding rather than the formal 4-fixture rubric at `doc
 (M1, M2 passed — see `docs/progress.md`.)
 
 
-### M7 — Long run returns as a task ⏳ (after Phase 7)
+### M7 — Long run returns as a task 🚧 (FastMCP-client half passed 2026-09-03; Claude Code half pending)
 The July 10 reporter's 400-step hyperelastic scene, called from a fresh Claude Code session, returns a task handle and delivers the diagnose result without a timeout. User confirms from the client side; `pytest` cannot see the client.
 ---
 

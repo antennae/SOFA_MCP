@@ -1,3 +1,8 @@
+**Status (2026-09-03):** RESOLVED on branch `feature/trunk-hyper-round2`.
+Timeout → `timeout_s` on the three run tools + MCP task mode (FastMCP 4);
+rule_6 → real bug in the ancestor walk (`id()`-keyed parent map), fixed;
+dt precedence → documented (argument wins). See `docs/plan.md` Phase 6.4 / 7.
+
   sofa-mcp feedback (as requested)
 
   - What worked well: diagnose_scene was the workhorse — nan_first_step + displacement_series + the compacted NNCG W/delta/lambda log block

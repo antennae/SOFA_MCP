@@ -355,3 +355,10 @@ Branch `feature/trunk-hyper-round2` off main (main fast-forwarded to the June wo
 - `c82a20f` — FastMCP 3.0.2 → 4.0.2 with `[tasks]` extra (mcp 2.1.1, fastmcp-tasks 4.0.2). Zero server-code changes. Transport test adapted to the two-stream client. 140/140 green. Server started on :8000 and `server_status` round-tripped through the mcp 2.x client.
 
 Gate for Phase 7 step 2: user reconnects from Claude Code and confirms the 17 tools appear.
+
+## Phase 7 steps 2-4 + rule_6 root cause ✅ (2026-09-03)
+
+- `ab34a8f` — `TasksExtension` registered; `diagnose_scene`, `enable_logs_and_run`, `perturb_and_run` run as MCP background tasks in optional mode (legacy clients block as before). `server_status.runs_in_flight` lists executing runs. Over HTTP with the FastMCP client: task accepted in ~10 ms, polled to completion. 2 new tests.
+- **M7 (client half):** the reporter's `~/workspace/MOR/scene/trunk_hyper/trunkHyper.py`, 400 steps, MooneyRivlin, submitted as a task: result in 15 s, 400-entry displacement series, no NaN, gravity sag 183 mm. No timeout.
+- **rule_6 was a real bug**, found because the M7 run flagged `/root/Trunk/fixed`. The morning closure ("existing test covers it") was wrong: the test passed by id() reuse luck. `_build_parent_map` keyed by `id()` of transient SofaPython3 wrappers lost every leaf node; rules 3, 6, 7 all walked one-node chains for leaves. Fixed by keying on `getPathName()` (plus a leftover direct `id()` lookup in 7B). Regression test mirrors the reporter's tree shape and failed before the fix.
+- Lesson recorded: a rule test that passes is not evidence the walk works; the reporter's own scene was the decisive check.
