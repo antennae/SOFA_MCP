@@ -346,3 +346,12 @@ Commit `fe78335` on `feature/trunk-hyper-feedback-2026-06-19` (unmerged as of 20
 ## Research note — MCP 2026-07-28 spec + FastMCP 4 (2026-09-02)
 
 Checked online for the July 10 timeout ask. Spec 2026-07-28 moved long-running work into the `io.modelcontextprotocol/tasks` extension (poll-based `tasks/get`). FastMCP 4.0.1 (2026-09-01) ships it as `@mcp.tool(task=True)` with legacy-client fallback to blocking. Claude Code client timeout is ~28 h by default and auto-backgrounds calls >2 min, so the reporter's wall was our `RUNNER_TIMEOUT_S = 90`. Plan: Phase 6.4 #1 tier 1 (`timeout_s` param) now, Phase 7 (upgrade + task mode) next. Sources in the 2026-09-02 session transcript; spec blog `blog.modelcontextprotocol.io/posts/2026-07-28/`, FastMCP docs `gofastmcp.com/servers/tasks`.
+
+## Phase 6.4 round 2 + Phase 7 step 1 ✅ (2026-09-03)
+
+Branch `feature/trunk-hyper-round2` off main (main fast-forwarded to the June work first).
+
+- `0eafd79` — `timeout_s` (default 90, `<= 0` raises) on `diagnose_scene`, `enable_logs_and_run`, `perturb_and_run`; timeout message names the knob. `dt` precedence (argument wins, goes straight to `Sofa.Simulation.animate`) documented in docstrings and a new SKILL.md subsection. Two regression tests. rule_6 clamp-child report closed without a rule change: the existing child-node test already covers it.
+- `c82a20f` — FastMCP 3.0.2 → 4.0.2 with `[tasks]` extra (mcp 2.1.1, fastmcp-tasks 4.0.2). Zero server-code changes. Transport test adapted to the two-stream client. 140/140 green. Server started on :8000 and `server_status` round-tripped through the mcp 2.x client.
+
+Gate for Phase 7 step 2: user reconnects from Claude Code and confirms the 17 tools appear.
