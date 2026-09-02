@@ -30,6 +30,8 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 |---|---|---|
 | 6.1 — Investigative debugging toolkit | ✅ done | Steps 1, 1.5, 2, 3, 4 done; Step 5 automated half done 2026-05-02; M5 passed 2026-05-02 by user dogfooding the toolkit in real authoring sessions |
 | 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5, #8 shipped (2026-04-30 / 2026-05-02); 3 of 8 still pending (low-severity #3, #6, #7) |
+| 6.4 — trunk_hyper feedback (June + July rounds) | 🚧 partial | June 19 round shipped 2026-06-30 (rule_6 `mstate`, `env` override, `displacement_series`, `compact_log`). July 10 round open: runner timeout, rule_6 clamp-node repro, dt precedence doc |
+| 7 — FastMCP 4 + MCP Tasks | ⏳ planned | MCP spec 2026-07-28 + FastMCP 4.0 (2026-08-31) give a native submit-then-poll job mode via `@mcp.tool(task=True)`. Answers the July 10 timeout/async ask without a hand-written job table |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ deferred | M3 gate; deprioritized 2026-05-02 — beginner-install ergonomics, not portfolio-critical |
 | 6.2 — Inverse-problem authoring (no new tool) | ✅ done | code+docs shipped 2026-05-02 (tri_leg_inverse.py + SKILL section + references); M6 passed 2026-05-02 — user confirmed render shows three legs reaching three goals |
@@ -112,11 +114,40 @@ Real-world dogfooding from the MOR-trunk authoring session (2026-04-30, full rep
 
 ---
 
+### Phase 6.4 — trunk_hyper feedback rounds (2026-06-19, 2026-07-10)
+
+Two dogfooding rounds from the hyperelastic-trunk instability debug (`docs/feedback_2026-06-19_trunk_hyper_diagnose.md`, `docs/feedback_2026-07-10_trunk_hyper.md`). Round one shipped 2026-06-30 on `feature/trunk-hyper-feedback-2026-06-19` (commit `fe78335`). Round two is untriaged as of 2026-09-02.
+
+| # | Item | Severity | Status / plan |
+|---|---|---|---|
+| 1 | **Runner timeout** — a 400-step hyperelastic run timed out; no way to raise the budget, no job mode, no "still busy?" signal | **high** | Open. The wall is our own `RUNNER_TIMEOUT_S = 90` in `sofa_mcp/observer/diagnostics.py:40`, not the client (Claude Code's MCP call timeout defaults to ~28 h and auto-backgrounds calls >2 min). *Hypothesis, n=1: the reporter's timeout was this constant.* Tier 1: expose `timeout_s` (default 90) on `diagnose_scene`, `enable_logs_and_run`, `perturb_and_run`. Tier 2: Phase 7 |
+| 2 | **rule_6 false positive on clamp child node** — `RestShapeSpringsForceField` in a child node flagged "no MechanicalObject in its ancestor chain" | medium | Open, **unverified**. The 2026-06-30 fix already exempts explicit `mstate` links and walks ancestors, so a parent-node MO should pass. Either the reporter ran a pre-fix server or the MO is in a sibling subtree. Needs a repro scene before touching the rule |
+| 3 | **`dt` precedence undocumented** — argument vs `root.dt` set in `createScene` | low | Open. Fact: `_diagnose_runner.py` passes the `dt` argument straight to `Sofa.Simulation.animate`, so the argument wins. One-line doc fix in the tool docstring + SKILL.md |
+| 4 | **`min_element_volume` per-step series** (June round, friction #3b) | low | Deferred roadmap item; needs per-step element-volume computation from topology |
+
+### Phase 7 — FastMCP 4 + MCP Tasks (job mode)
+
+Context (researched 2026-09-02): MCP spec **2026-07-28** removed sessions/`initialize`, made every request self-describing, and moved long-running work into the `io.modelcontextprotocol/tasks` extension (server returns a task handle, client polls `tasks/get`). **FastMCP 4.0.1** (2026-09-01) serves both the new spec and legacy clients from one deployment and ships the extension: `mcp.add_extension(TasksExtension())` + `@mcp.tool(task=True)` on an `async def`. Legacy clients fall back to a blocking call. Claude Code speaks 2026-07-28 from v2.1.232.
+
+We are on FastMCP 3.0.2 / Python 3.12. The only 4.0 breaking change (server-initiated sampling and roots removed) does not touch this server; all 17 tools are plain sync `def`.
+
+Steps:
+1. Bump `pyproject.toml` to `fastmcp = "^4.0"`, install `fastmcp[tasks]`, run `pytest test/` unchanged. **Gate: all green, `server_status` round-trips from a fresh Claude Code session.**
+2. Wrap the three runner tools (`diagnose_scene`, `enable_logs_and_run`, `perturb_and_run`) as `async def` with `task=TaskConfig(mode="optional")`, subprocess call via `asyncio.to_thread`. Report progress via `Progress` per step block. Keep `timeout_s` from 6.4 #1 as the inner subprocess budget.
+3. Make `server_status` list running tasks (the extension keeps the task table; we surface it).
+4. Re-run the July 10 reporter's 400-step scene end to end. **Gate M7: the call returns a task handle and the result arrives without a timeout.**
+
+Non-goal: a hand-written job table / polling tool. The extension is that.
+
+---
+
 ## Suggested execution order
 
 Portfolio-first ordering (2026-05-02): the project is primarily a portfolio piece, secondarily a beginner-friendly tool. That moves visible artifacts (renders, headline demo, README) ahead of install ergonomics (Docker).
 
 **M5 ✅ + M6 ✅ passed 2026-05-02** → 5 (LICENSE + fix two broken test files) → 4 (README rewrite — the actual portfolio artifact, last so it can showcase #8 + 6.2's tri-leg demo) → 3 (Docker, deferred — beginner-install ergonomics, not portfolio) → 6.3 #3/#6/#7 (low-severity ergonomic cleanups).
+
+**Updated 2026-09-02.** Field feedback now outranks polish: the tool is being used in real debugging sessions and the July 10 round has a high-severity item. Order: merge `feature/trunk-hyper-feedback-2026-06-19` → 6.4 #3 (dt doc, minutes) → 6.4 #1 tier 1 (`timeout_s`, ~1 h) → 6.4 #2 (repro first; fix only if it reproduces) → 7 (FastMCP 4 + Tasks, ~half a day, gated on step 1 green) → 5 (LICENSE etc.) → 4 (README, now able to showcase job mode) → 3 / 6.3 leftovers.
 
 If energy is constrained: ship 6.3 #8 + 6.2 + Phase 5 + Phase 4 as v0.1 (portfolio-ready). Docker and the low-severity 6.3 items can wait until someone actually wants to run it locally without building SOFA from source.
 
@@ -138,6 +169,9 @@ Passed via real-world dogfooding rather than the formal 4-fixture rubric at `doc
 
 (M1, M2 passed — see `docs/progress.md`.)
 
+
+### M7 — Long run returns as a task ⏳ (after Phase 7)
+The July 10 reporter's 400-step hyperelastic scene, called from a fresh Claude Code session, returns a task handle and delivers the diagnose result without a timeout. User confirms from the client side; `pytest` cannot see the client.
 ---
 
 ## Files yet to create / modify
@@ -169,5 +203,7 @@ End-state check that proves the whole plan worked. Items 1–6 are the portfolio
 - Phase 6.2: ~1 day
 - Phase 5: ~half a day
 - Phase 4: ~1 day
+- Phase 6.4 remaining: ~2 h (#3 minutes, #1 tier 1 ~1 h, #2 repro ~1 h; fix cost unknown until it reproduces)
+- Phase 7: ~half a day (upgrade + async wrappers + M7 run)
 
-**Remaining: ~3.5-4 days sequentially** (down from ~4-5 after Step 4 + Phase 6.3 high-leverage items shipped). Less if phases parallelize. End state reads as a *capable* tool, not just a polished one. Phases 1-5 ship as v0.1 (portfolio-ready); 6.2 lands as v0.2 (the substantive features that earn the deeper claim).
+**Remaining: ~4-4.5 days sequentially** (2026-09-02: +~0.75 day for 6.4 + 7) (down from ~4-5 after Step 4 + Phase 6.3 high-leverage items shipped). Less if phases parallelize. End state reads as a *capable* tool, not just a polished one. Phases 1-5 ship as v0.1 (portfolio-ready); 6.2 lands as v0.2 (the substantive features that earn the deeper claim).

@@ -194,6 +194,8 @@ future work if a real scene hits it.
 
 - **2026-04-30 — MOR-trunk authoring session.** Used the MCP from a separate Claude Code session in `~/workspace/sofa` to author a 4-cable soft-trunk scene for kPCA Model Order Reduction work (final output `~/workspace/MOR/scene/trunk/trunk.py`, 100 steps, 113mm tip displacement, no NaN). Net assessment: **net positive** — `validate_scene` and `diagnose_scene` together caught a `GenericConstraintSolver` v25.12 deprecation + verified physics in two calls, work the user estimated at ~5 manual cycles otherwise. Surfaced 7 concrete bugs / friction points (3 real bugs, 2 false-positive Rule 7 paths, 3 ergonomic gaps) — full report at `docs/feedback_2026-04-30_mor_trunk_session.md`, prioritized punch list folded into `docs/plan.md` Phase 6.3.
 
+- **2026-06-19 — trunk_hyper FOM instability debug (round 1).** Hyperelastic trunk that segfaulted in runSofa and diverged under gravity. Used the MCP after ~2 h manual bisection. Four friction items; shipped 2026-06-30 as `fe78335` (rule_6 `mstate` exemption, `diagnose_scene(env=...)`, `displacement_series`, `compact_log`); `min_element_volume` series deferred. Report: `docs/feedback_2026-06-19_trunk_hyper_diagnose.md`.
+- **2026-07-10 — trunk_hyper (round 2).** `diagnose_scene` called "the workhorse"; `env` override and log compaction judged well. New items: 400-step run hit the 90 s runner budget with no override or job mode; a rule_6 clamp-node flag (unverified against the June fix); `dt` precedence undocumented. Folded into `docs/plan.md` Phase 6.4; the timeout ask maps to Phase 7 (FastMCP 4 Tasks). Report: `docs/feedback_2026-07-10_trunk_hyper.md`.
 ---
 
 ## Phase 6.1 Step 4 — Probe library (high-leverage pair) ✅ (2026-05-02)
@@ -336,3 +338,11 @@ Cleared the seven pre-existing failures so `pytest test/` is green for the first
 **Outcome:** `~/venv/bin/python -m pytest test/` → `113 passed in 59.61s`. No production-code changes; this was pure test maintenance.
 
 **Still pending in Phase 5:** LICENSE (MIT), CONTRIBUTING.md, `.github/ISSUE_TEMPLATE/bug.md`, `pyproject.toml` author/SOFA-version comment. CI workflow skipped — would require a SOFA-built runner image (~10 min per CI run), out of scope for portfolio v0.1.
+
+## Phase 6.4 round 1 — trunk_hyper June feedback ✅ (2026-06-30)
+
+Commit `fe78335` on `feature/trunk-hyper-feedback-2026-06-19` (unmerged as of 2026-09-02). `rule_6_forcefield_mapping` exempts force fields wired via an explicit `mstate` link (regression tests: explicit mstate, ancestor walk). `diagnose_scene(env={...})` merges over the server environment for both summarize and runner subprocesses. `displacement_series` per MO with `null` for non-finite steps. `compact_log` collapses identical-line runs into `… (×N)`, byte-exact. `regularizationTerm` win recorded as a principle-shaped hint in the debugging playbook, not a symptom→fix row. 13 files, +357/−17.
+
+## Research note — MCP 2026-07-28 spec + FastMCP 4 (2026-09-02)
+
+Checked online for the July 10 timeout ask. Spec 2026-07-28 moved long-running work into the `io.modelcontextprotocol/tasks` extension (poll-based `tasks/get`). FastMCP 4.0.1 (2026-09-01) ships it as `@mcp.tool(task=True)` with legacy-client fallback to blocking. Claude Code client timeout is ~28 h by default and auto-backgrounds calls >2 min, so the reporter's wall was our `RUNNER_TIMEOUT_S = 90`. Plan: Phase 6.4 #1 tier 1 (`timeout_s` param) now, Phase 7 (upgrade + task mode) next. Sources in the 2026-09-02 session transcript; spec blog `blog.modelcontextprotocol.io/posts/2026-07-28/`, FastMCP docs `gofastmcp.com/servers/tasks`.
