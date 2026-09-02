@@ -99,7 +99,7 @@ Full schemas are exposed via the MCP `tools/list` endpoint. Quick reference by c
 | Simulation | `run_and_extract`, `process_simulation_data`, `render_scene_snapshot` |
 | Diagnose | `diagnose_scene` (sanity report: Health Rules + runtime smell tests + per-MO metrics + truncated logs) |
 | Probes | `enable_logs_and_run` (toggle printLog on targets, animate, capture filtered logs), `perturb_and_run` (apply Data-field overrides before init, animate, return per-MO metrics) |
-| Misc | `server_status` (uptime, plugin-cache freshness, recent log lines) |
+| Misc | `server_status` (uptime, plugin-cache freshness, recent log lines, `runs_in_flight` table of diagnose/probe calls still executing) |
 
 For raw HTTP/curl debugging (rarely needed — agents use the MCP transport directly), see `references/curl-examples.md`.
 
@@ -112,6 +112,8 @@ Flip `verbose=True` only when you suspect the filter dropped a useful line: e.g.
 ### `dt` and `timeout_s` on the run tools
 
 `diagnose_scene`, `enable_logs_and_run`, and `perturb_and_run` pass `dt` straight to `Sofa.Simulation.animate`, so the argument overrides whatever `root.dt` the scene sets in `createScene`. Match the scene's intended `dt` explicitly. All three take `timeout_s` (default 90) as the subprocess wall-clock budget; a timeout returns `error: "Timeout"` with the partial log. Raise `timeout_s` for long runs rather than splitting them.
+
+The same three tools are MCP background tasks (spec 2026-07-28 tasks extension). On a client that supports tasks the call returns a task handle at once and the result is delivered when the run finishes, so a 400-step hyperelastic run no longer blocks the conversation; on a legacy client the call blocks as before. Either way, `server_status` lists the run under `runs_in_flight` until it completes, so "is it still going?" is one cheap call.
 
 ### Probe tools (Step 4)
 

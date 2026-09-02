@@ -1,4 +1,7 @@
 
+import asyncio
+import contextlib
+import itertools
 import os
 import sys
 import time
@@ -10,6 +13,9 @@ sys.path.append(os.path.dirname(os.path.dirname(__file__)))
 
 from typing import Any
 from fastmcp import FastMCP
+from fastmcp.server.dependencies import Progress
+from fastmcp.utilities.tasks import TaskConfig
+from fastmcp_tasks import TasksExtension
 import sofa_mcp.architect.mesh_inspector as mesh_inspector
 import sofa_mcp.architect.mesh_generator as mesh_generator
 import sofa_mcp.architect.component_query as component_query
@@ -43,13 +49,53 @@ def _log_server_event(level: str, message: str) -> None:
 # Create the MCP server instance
 mcp = FastMCP("SOFA MCP")
 
+# MCP Tasks (spec 2026-07-28, extension io.modelcontextprotocol/tasks). The
+# three scene-running tools are declared task-capable in "optional" mode: a
+# client that opts in gets a task handle back immediately and polls for the
+# result; a legacy client gets the old blocking call. Backend is the default
+# in-process memory:// docket, which is all a single local server needs.
+mcp.add_extension(TasksExtension())
+_RUN_AS_TASK = TaskConfig(mode="optional")
+
+
+_RUNS_IN_FLIGHT: dict[str, dict] = {}
+_RUN_SEQ = itertools.count(1)
+
+
+@contextlib.contextmanager
+def _track_run(tool: str, **info):
+    """Register a scene run in the in-flight table for the duration of the
+    call, so `server_status` can answer "is that long run still going?".
+    Tracked here rather than via the docket backend: pydocket 0.24.1's
+    memory:// snapshot() raises KeyError('message_id') while a task is
+    pending, and this table also covers the legacy blocking path."""
+    run_id = f"{tool}-{next(_RUN_SEQ)}"
+    _RUNS_IN_FLIGHT[run_id] = {
+        "tool": tool,
+        "started": _dt.datetime.now().isoformat(timespec="seconds"),
+        **info,
+    }
+    try:
+        yield run_id
+    finally:
+        _RUNS_IN_FLIGHT.pop(run_id, None)
+
+
+def _runs_in_flight() -> dict:
+    return {
+        "count": len(_RUNS_IN_FLIGHT),
+        "running": [{"id": k, **v} for k, v in _RUNS_IN_FLIGHT.items()],
+    }
+
+
 @mcp.tool()
-def server_status(log_tail: int = 20) -> dict:
-    """Returns server uptime, plugin-cache freshness, and recent log lines.
+async def server_status(log_tail: int = 20) -> dict:
+    """Returns server uptime, plugin-cache freshness, recent log lines, and the in-flight scene-run table (`runs_in_flight`) for diagnose/probe calls still executing, whether submitted as MCP tasks or blocking calls.
 
     Use when a previous call returned a transport error and you want to
     confirm the server is responsive again — eliminates the "is it alive?"
-    guessing the agent otherwise has to do.
+    guessing the agent otherwise has to do — or to see whether a long run
+    submitted as a task is still in flight.
     """
     from sofa_mcp.architect import plugin_cache
     cache_path = plugin_cache.get_cache_path()
@@ -81,6 +127,7 @@ def server_status(log_tail: int = 20) -> dict:
         "log_path": _SERVER_LOG_PATH,
         "log_tail": log_lines,
         "plugin_cache": cache_info,
+        "runs_in_flight": _runs_in_flight(),
     }
 
 
@@ -237,8 +284,8 @@ def get_plugins_for_components(component_names: list[str], context_components: l
     return component_query.get_plugins_for_components(component_names, context_components=context_components)
 
 
-@mcp.tool()
-def diagnose_scene(
+@mcp.tool(task=_RUN_AS_TASK)
+async def diagnose_scene(
     scene_path: str,
     complaint: str = None,
     steps: int = 50,
@@ -246,6 +293,7 @@ def diagnose_scene(
     verbose: bool = False,
     env: dict = None,
     timeout_s: int = 90,
+    progress: Progress = Progress(),
 ) -> dict:
     """Runs a sanity report for a SOFA scene: structural anomalies (Health Rules) plus per-step metrics (max displacement, max force, NaN-first-step) on every unmapped MechanicalObject. `complaint` is accepted for forward-compat and currently unused.
 
@@ -254,41 +302,57 @@ def diagnose_scene(
     `verbose=False` (default) compacts `solver_logs` to plugin loads, convergence summaries, errors, warnings, and tracebacks. The response carries `log_lines_dropped: int` when filtering happened. Set `verbose=True` for the full captured log (still subject to head/tail char-budget truncation).
 
     `dt` is passed straight to `Sofa.Simulation.animate` and overrides any `root.dt` the scene sets in `createScene`. `timeout_s` (default 90) is the wall-clock budget for the runner subprocess; raise it for long runs (e.g. 400 hyperelastic steps) instead of splitting the run.
+
+    Task-capable: on a client that supports MCP tasks this returns a task handle immediately and the result arrives when the run finishes; `server_status` lists runs in flight. Legacy clients get the blocking call.
     """
-    return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt, verbose=verbose, env=env, timeout_s=timeout_s)
+    await progress.set_message(f"diagnose_scene: {int(steps)} steps, dt={dt}, budget {timeout_s}s")
+    with _track_run("diagnose_scene", scene_path=scene_path, steps=int(steps), timeout_s=timeout_s):
+        result = await asyncio.to_thread(
+            diagnostics.diagnose_scene, scene_path,
+            complaint=complaint, steps=steps, dt=dt, verbose=verbose, env=env, timeout_s=timeout_s,
+        )
+    await progress.set_message("diagnose_scene: done")
+    return result
 
 
-@mcp.tool()
-def enable_logs_and_run(
+@mcp.tool(task=_RUN_AS_TASK)
+async def enable_logs_and_run(
     scene_path: str,
     log_targets: list,
     steps: int = 5,
     dt: float = 0.01,
     verbose: bool = False,
     timeout_s: int = 90,
+    progress: Progress = Progress(),
 ) -> dict:
     """Toggle printLog=True on objects matching `log_targets` (class names or node-path fragments), animate for `steps` iterations, return the captured logs.
 
     Use this after `diagnose_scene` flags an anomaly to inspect what a specific solver, mapping, or constraint is doing at runtime. Logs are compacted by default; pass `verbose=True` for the full stream. `dt` overrides the scene's `root.dt` for the stepping loop; `timeout_s` (default 90) is the subprocess wall-clock budget.
     """
-    return probes.enable_logs_and_run(
-        scene_path=scene_path,
-        log_targets=log_targets,
-        steps=steps,
-        dt=dt,
-        verbose=verbose,
-        timeout_s=timeout_s,
-    )
+    await progress.set_message(f"enable_logs_and_run: {int(steps)} steps, budget {timeout_s}s")
+    with _track_run("enable_logs_and_run", scene_path=scene_path, steps=int(steps), timeout_s=timeout_s):
+        result = await asyncio.to_thread(
+            probes.enable_logs_and_run,
+            scene_path=scene_path,
+            log_targets=log_targets,
+            steps=steps,
+            dt=dt,
+            verbose=verbose,
+            timeout_s=timeout_s,
+        )
+    await progress.set_message("enable_logs_and_run: done")
+    return result
 
 
-@mcp.tool()
-def perturb_and_run(
+@mcp.tool(task=_RUN_AS_TASK)
+async def perturb_and_run(
     scene_path: str,
     parameter_changes: dict,
     steps: int = 50,
     dt: float = 0.01,
     verbose: bool = False,
     timeout_s: int = 90,
+    progress: Progress = Progress(),
 ) -> dict:
     """Apply Data-field overrides (e.g. `{"/root/leg/ff": {"youngModulus": 1000}}`) before init, animate, return per-MO metrics. Use to test a hypothesis: "is the deformation small because the material is too stiff?" → halve youngModulus, re-run, see if displacement scales as expected.
 
@@ -296,14 +360,19 @@ def perturb_and_run(
 
     Logs are compacted by default; pass `verbose=True` for the full stream. `dt` overrides the scene's `root.dt` for the stepping loop; `timeout_s` (default 90) is the subprocess wall-clock budget.
     """
-    return probes.perturb_and_run(
-        scene_path=scene_path,
-        parameter_changes=parameter_changes,
-        steps=steps,
-        dt=dt,
-        verbose=verbose,
-        timeout_s=timeout_s,
-    )
+    await progress.set_message(f"perturb_and_run: {int(steps)} steps, budget {timeout_s}s")
+    with _track_run("perturb_and_run", scene_path=scene_path, steps=int(steps), timeout_s=timeout_s):
+        result = await asyncio.to_thread(
+            probes.perturb_and_run,
+            scene_path=scene_path,
+            parameter_changes=parameter_changes,
+            steps=steps,
+            dt=dt,
+            verbose=verbose,
+            timeout_s=timeout_s,
+        )
+    await progress.set_message("perturb_and_run: done")
+    return result
 
 
 def main() -> None:
