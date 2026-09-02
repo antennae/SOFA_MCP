@@ -3,7 +3,7 @@
 Two-subprocess architecture (Step 2):
   1. `summarize_scene(content)` — 30s budget; produces structural anomalies
      (the `checks` list from the existing 9 Health Rules) without running init.
-  2. `_diagnose_runner.py <scene_path> <steps> <dt> <output_json>` — 90s budget;
+  2. `_diagnose_runner.py <scene_path> <steps> <dt> <output_json>` — `timeout_s` budget (default 90s);
      loads the scene, runs SOFA init + animate, writes per-step metrics to a
      tempfile passed on argv.
 
@@ -296,6 +296,7 @@ def diagnose_scene(
     dt: float = 0.01,
     verbose: bool = False,
     env: Dict[str, Any] = None,
+    timeout_s: int = None,
 ) -> Dict[str, Any]:
     """Run the diagnose-scene sanity report on a scene file.
 
@@ -304,7 +305,11 @@ def diagnose_scene(
         complaint: Free-form agent hint; accepted but unused in Step 2 (Step 5
             playbook will use it to bias which probe runs next).
         steps: Number of animation steps to run.
-        dt: Time step.
+        dt: Time step passed straight to `Sofa.Simulation.animate(root, dt)`.
+            It overrides any `root.dt` the scene sets in createScene for the
+            stepping loop; the scene's own value is never read.
+        timeout_s: Wall-clock budget for the runner subprocess. None means
+            the module default `RUNNER_TIMEOUT_S` (90 s). Must be > 0.
         env: Optional environment-variable overrides for the scene subprocess(es),
             merged over the server's environment (not replacing it). Use this to
             diagnose a scene variant selected by an env var (e.g.
@@ -322,6 +327,10 @@ def diagnose_scene(
         Sanity report dict — see the Step 2 contract in docs/plan.md.
     """
     del complaint  # accepted for forward-compat; unused in Step 2.
+    if timeout_s is None:
+        timeout_s = RUNNER_TIMEOUT_S
+    if timeout_s <= 0:
+        raise ValueError(f"timeout_s must be > 0; got {timeout_s!r}")
 
     def _finalize_logs(text: str) -> tuple[str, int]:
         """Compact (if verbose=False) then head/tail-truncate. Returns
@@ -379,7 +388,7 @@ def diagnose_scene(
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=RUNNER_TIMEOUT_S,
+                timeout=timeout_s,
                 env=merged_env,
             )
         except subprocess.TimeoutExpired as exc:
@@ -392,7 +401,7 @@ def diagnose_scene(
             response: Dict[str, Any] = {
                 "success": False,
                 "error": "Timeout",
-                "message": f"diagnose_scene runner exceeded {RUNNER_TIMEOUT_S}s.",
+                "message": f"diagnose_scene runner exceeded {timeout_s}s (raise `timeout_s` for long runs).",
                 "anomalies": anomalies,
                 "metrics": _empty_metrics(),
                 "init_stdout_findings": [],

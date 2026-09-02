@@ -109,6 +109,10 @@ For raw HTTP/curl debugging (rarely needed — agents use the MCP transport dire
 
 Flip `verbose=True` only when you suspect the filter dropped a useful line: e.g. an unfamiliar `[INFO]` channel, an obscure deprecation message, or when the agent needs to debug the filter itself. Smell-test detection (`qp_infeasible_in_log` etc.) always runs against the full pre-compaction log, so `verbose=False` does not hide detected anomalies — it only hides the raw text those anomalies were derived from.
 
+### `dt` and `timeout_s` on the run tools
+
+`diagnose_scene`, `enable_logs_and_run`, and `perturb_and_run` pass `dt` straight to `Sofa.Simulation.animate`, so the argument overrides whatever `root.dt` the scene sets in `createScene`. Match the scene's intended `dt` explicitly. All three take `timeout_s` (default 90) as the subprocess wall-clock budget; a timeout returns `error: "Timeout"` with the partial log. Raise `timeout_s` for long runs rather than splitting them.
+
 ### Probe tools (Step 4)
 
 `enable_logs_and_run` and `perturb_and_run` are follow-up instruments after `diagnose_scene` flags an anomaly. Use `enable_logs_and_run` when you want to see what a specific solver, mapping, or constraint says at runtime (the targets argument matches by class name like `"EulerImplicitSolver"` or by node-path fragment like `"/leg_0/odesolver"`). Use `perturb_and_run` to test a hypothesis by modifying one Data field and re-measuring — e.g. halve `youngModulus`, see if displacement doubles.

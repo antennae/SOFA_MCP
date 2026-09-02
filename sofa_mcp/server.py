@@ -245,14 +245,17 @@ def diagnose_scene(
     dt: float = 0.01,
     verbose: bool = False,
     env: dict = None,
+    timeout_s: int = 90,
 ) -> dict:
     """Runs a sanity report for a SOFA scene: structural anomalies (Health Rules) plus per-step metrics (max displacement, max force, NaN-first-step) on every unmapped MechanicalObject. `complaint` is accepted for forward-compat and currently unused.
 
     `env` (optional) is a dict of environment-variable overrides merged over the server's environment for the scene subprocesses — use it to diagnose a scene variant chosen by an env var (e.g. `{"TRUNK_HYPER_MATERIAL": "MooneyRivlin"}`) without editing the scene file.
 
     `verbose=False` (default) compacts `solver_logs` to plugin loads, convergence summaries, errors, warnings, and tracebacks. The response carries `log_lines_dropped: int` when filtering happened. Set `verbose=True` for the full captured log (still subject to head/tail char-budget truncation).
+
+    `dt` is passed straight to `Sofa.Simulation.animate` and overrides any `root.dt` the scene sets in `createScene`. `timeout_s` (default 90) is the wall-clock budget for the runner subprocess; raise it for long runs (e.g. 400 hyperelastic steps) instead of splitting the run.
     """
-    return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt, verbose=verbose, env=env)
+    return diagnostics.diagnose_scene(scene_path, complaint=complaint, steps=steps, dt=dt, verbose=verbose, env=env, timeout_s=timeout_s)
 
 
 @mcp.tool()
@@ -262,10 +265,11 @@ def enable_logs_and_run(
     steps: int = 5,
     dt: float = 0.01,
     verbose: bool = False,
+    timeout_s: int = 90,
 ) -> dict:
     """Toggle printLog=True on objects matching `log_targets` (class names or node-path fragments), animate for `steps` iterations, return the captured logs.
 
-    Use this after `diagnose_scene` flags an anomaly to inspect what a specific solver, mapping, or constraint is doing at runtime. Logs are compacted by default; pass `verbose=True` for the full stream.
+    Use this after `diagnose_scene` flags an anomaly to inspect what a specific solver, mapping, or constraint is doing at runtime. Logs are compacted by default; pass `verbose=True` for the full stream. `dt` overrides the scene's `root.dt` for the stepping loop; `timeout_s` (default 90) is the subprocess wall-clock budget.
     """
     return probes.enable_logs_and_run(
         scene_path=scene_path,
@@ -273,6 +277,7 @@ def enable_logs_and_run(
         steps=steps,
         dt=dt,
         verbose=verbose,
+        timeout_s=timeout_s,
     )
 
 
@@ -283,12 +288,13 @@ def perturb_and_run(
     steps: int = 50,
     dt: float = 0.01,
     verbose: bool = False,
+    timeout_s: int = 90,
 ) -> dict:
     """Apply Data-field overrides (e.g. `{"/root/leg/ff": {"youngModulus": 1000}}`) before init, animate, return per-MO metrics. Use to test a hypothesis: "is the deformation small because the material is too stiff?" → halve youngModulus, re-run, see if displacement scales as expected.
 
     Path can be an object path like `/root/beam/FEM` (single object) or a node path like `/root/beam` (fans out to every object on the node that exposes the field — prefer object paths when ambiguous).
 
-    Logs are compacted by default; pass `verbose=True` for the full stream.
+    Logs are compacted by default; pass `verbose=True` for the full stream. `dt` overrides the scene's `root.dt` for the stepping loop; `timeout_s` (default 90) is the subprocess wall-clock budget.
     """
     return probes.perturb_and_run(
         scene_path=scene_path,
@@ -296,6 +302,7 @@ def perturb_and_run(
         steps=steps,
         dt=dt,
         verbose=verbose,
+        timeout_s=timeout_s,
     )
 
 

@@ -33,6 +33,8 @@ def _run_subprocess(mode: str, scene_path: str, spec: Dict[str, Any], timeout_s:
     The captured stdout+stderr is returned in a separate `_logs_raw` key
     so callers can apply `compact_log` per-probe.
     """
+    if timeout_s is None or timeout_s <= 0:
+        raise ValueError(f"timeout_s must be > 0; got {timeout_s!r}")
     with tempfile.NamedTemporaryFile(suffix=".json", mode="w", delete=False, encoding="utf-8") as spec_tmp:
         json.dump(spec, spec_tmp)
         spec_path = spec_tmp.name
@@ -58,7 +60,7 @@ def _run_subprocess(mode: str, scene_path: str, spec: Dict[str, Any], timeout_s:
             return {
                 "success": False,
                 "error": "Timeout",
-                "message": f"probe runner exceeded {timeout_s}s.",
+                "message": f"probe runner exceeded {timeout_s}s (raise `timeout_s` for long runs).",
                 "_logs_raw": captured,
             }
 

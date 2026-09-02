@@ -116,6 +116,26 @@ def test_diagnose_scene_runner_timeout(tmp_path, monkeypatch):
     assert isinstance(result.get("anomalies"), list)
 
 
+def test_diagnose_scene_timeout_s_parameter(tmp_path):
+    """Phase 6.4 #1: the per-call `timeout_s` overrides the module default.
+    The July-10 reporter hit the hardcoded 90s wall on a 400-step run."""
+    scene_file = tmp_path / "sleep_forever.py"
+    scene_file.write_text(_TIMEOUT_SCENE)
+
+    result = diagnostics.diagnose_scene(str(scene_file), steps=1, dt=0.01, timeout_s=3)
+
+    assert result["success"] is False
+    assert result.get("error") == "Timeout"
+    assert "3s" in result["message"]
+
+
+def test_diagnose_scene_timeout_s_rejects_nonpositive(tmp_path):
+    scene_file = tmp_path / "any.py"
+    scene_file.write_text("def createScene(rootNode):\n    pass\n")
+    with pytest.raises(ValueError):
+        diagnostics.diagnose_scene(str(scene_file), steps=1, dt=0.01, timeout_s=0)
+
+
 _RAISE_IN_CREATE_SCENE = """
 def createScene(rootNode):
     raise RuntimeError("intentionally broken for test")
