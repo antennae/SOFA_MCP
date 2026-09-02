@@ -110,7 +110,9 @@ def _call_tool(url: str, tool_name: str, args: dict) -> dict:
     from mcp.client.streamable_http import streamable_http_client
 
     async def _go():
-        async with streamable_http_client(url) as (read, write, _):
+        # mcp 1.x yields (read, write, get_session_id); mcp 2.x yields (read, write).
+        async with streamable_http_client(url) as streams:
+            read, write = streams[0], streams[1]
             async with ClientSession(read, write) as session:
                 await session.initialize()
                 return await session.call_tool(tool_name, args)

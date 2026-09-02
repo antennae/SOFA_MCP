@@ -15,7 +15,7 @@ packages = [{ include = "sofa_mcp" }]
 [tool.poetry.dependencies]
 python = "^3.10"
 trimesh = "^3.23.5"
-fastmcp = "^3.0"
+fastmcp = { version = "^4.0", extras = ["tasks"] }
 gmsh = "*"
 pymeshlab = "*"
 scipy = "*"
