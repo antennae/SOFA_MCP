@@ -196,3 +196,7 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
+
+# Local demo recordings and third-party sample projects (not repo content)
+mcp_demo/
+RobSouple-SOFA/
