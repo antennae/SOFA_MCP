@@ -44,6 +44,9 @@ def test_diagnose_scene_runs_as_task_and_server_status_sees_it():
                 await asyncio.sleep(0.1)
             assert seen, "diagnose_scene never appeared in runs_in_flight"
             assert seen[0]["scene_path"] == FIXTURE
+            # The in-memory client opts into the tasks extension, so the run
+            # must be recorded as a background task.
+            assert seen[0]["as_task"] is True, seen[0]
 
             final = _payload(await task.result())
             assert "anomalies" in final

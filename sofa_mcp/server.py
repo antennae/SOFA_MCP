@@ -73,12 +73,27 @@ def _track_run(tool: str, **info):
     _RUNS_IN_FLIGHT[run_id] = {
         "tool": tool,
         "started": _dt.datetime.now().isoformat(timespec="seconds"),
+        **_call_mode(),
         **info,
     }
+    _log_server_event("info", f"run start {run_id} {_RUNS_IN_FLIGHT[run_id]}")
     try:
         yield run_id
     finally:
         _RUNS_IN_FLIGHT.pop(run_id, None)
+
+
+def _call_mode() -> dict:
+    """Whether the current run executes as an MCP background task (inside a
+    docket worker) or as a plain blocking tool call. Read from docket's
+    current_execution contextvar: the FastMCP request context is a restored
+    snapshot inside the worker and does not carry the client's opt-in."""
+    try:
+        from docket.dependencies._base import current_execution
+        ex = current_execution.get(None)
+    except Exception:
+        ex = None
+    return {"as_task": ex is not None, "task_key": getattr(ex, "key", None)}
 
 
 def _runs_in_flight() -> dict:

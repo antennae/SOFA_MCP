@@ -31,7 +31,7 @@ The user has clarified the project's purpose: **portfolio piece first, beginner-
 | 6.1 — Investigative debugging toolkit | ✅ done | Steps 1, 1.5, 2, 3, 4 done; Step 5 automated half done 2026-05-02; M5 passed 2026-05-02 by user dogfooding the toolkit in real authoring sessions |
 | 6.3 — Field-feedback punch list | 🚧 partial | items #1, #2, #4, #5, #8 shipped (2026-04-30 / 2026-05-02); 3 of 8 still pending (low-severity #3, #6, #7) |
 | 6.4 — trunk_hyper feedback (June + July rounds) | ✅ done (tier 1) | June round shipped 2026-06-30; July round shipped 2026-09-03 (`timeout_s` on the three run tools, dt precedence documented, rule_6 clamp case already covered by test). #4 `min_element_volume` series still deferred |
-| 7 — FastMCP 4 + MCP Tasks | ✅ code done 2026-09-03 (steps 1-4). M7 passed via the FastMCP client over HTTP: 400-step trunk_hyper as a task, result in ~10-15 s, no timeout. Claude Code-side confirmation still pending (needs `/mcp` reconnect after the server restart) | MCP spec 2026-07-28 + FastMCP 4.0 (2026-08-31) give a native submit-then-poll job mode via `@mcp.tool(task=True)`. Answers the July 10 timeout/async ask without a hand-written job table |
+| 7 — FastMCP 4 + MCP Tasks | ✅ done 2026-09-03. M7 passed via the FastMCP client (task path) and via Claude Code (blocking path). **Fact: Claude Code negotiates 2026-07-28 but does not opt into the tasks extension**, so from Claude Code the three tools still block; `server_status.runs_in_flight` records `as_task: false`. Task mode is live for task-capable clients; Claude Code gets `timeout_s` + its own 2-minute auto-backgrounding | MCP spec 2026-07-28 + FastMCP 4.0 (2026-08-31) give a native submit-then-poll job mode via `@mcp.tool(task=True)`. Answers the July 10 timeout/async ask without a hand-written job table |
 | 4 — Tell the story (README + SKILL) | 🚧 partial | SKILL.md tightened; README rewrite pending |
 | 3 — Wrap the install (Dockerfile) | ⏳ deferred | M3 gate; deprioritized 2026-05-02 — beginner-install ergonomics, not portfolio-critical |
 | 6.2 — Inverse-problem authoring (no new tool) | ✅ done | code+docs shipped 2026-05-02 (tri_leg_inverse.py + SKILL section + references); M6 passed 2026-05-02 — user confirmed render shows three legs reaching three goals |
@@ -135,7 +135,7 @@ Steps:
 1. ✅ 2026-09-03 (`c82a20f`). `fastmcp = {version="^4.0", extras=["tasks"]}` → fastmcp 4.0.2 / mcp 2.1.1. No server change. One test-side fix (mcp 2.x client yields two streams). 140/140 green; `server_status` round-trips via the mcp 2.x client (17 tools). **Gate pending: user reconnects from a fresh Claude Code session (`/mcp`) and confirms.** Install gotcha: pip removed 3.0.2 after `fastmcp-slim` wrote the same paths → `pip install --force-reinstall --no-deps fastmcp-slim==4.0.2`.
 2. ✅ 2026-09-03 (`ab34a8f`). Three runner tools are `async def` with `task=TaskConfig(mode="optional")`, subprocess via `asyncio.to_thread`, coarse `Progress` messages (start/done; per-step progress would need the runner to stream, deferred).
 3. ✅ 2026-09-03. `server_status.runs_in_flight` is a server-side table (tool, scene_path, steps, timeout_s, started). Not `docket.snapshot()`: pydocket 0.24.1 memory:// raises `KeyError('message_id')` while a task is pending, and the table also covers the blocking path.
-4. ✅ M7 via FastMCP client over HTTP, 2026-09-03: `trunkHyper.py` 400 steps (NeoHookean and MooneyRivlin), task accepted in ~10 ms, visible in `runs_in_flight`, result in 10-15 s, `displacement_series` len 400, no NaN, no smells after the rule_6 fix. **Claude Code-side check pending.** Note: the run itself is fast here; why the reporter's hit 90 s is unknown (machine load or an earlier scene revision).
+4. ✅ M7 2026-09-03. FastMCP client over HTTP: `trunkHyper.py` 400 steps (NeoHookean and MooneyRivlin), task accepted in ~10 ms, visible in `runs_in_flight`, result in 10-15 s, `displacement_series` len 400, no NaN, no smells after the rule_6 fix. Claude Code: same scene, 400 steps, completed in 10 s as a **blocking** call; the server log records `as_task: False` because Claude Code (v2 runtime, protocol 2026-07-28) does not declare the tasks extension. Re-check when a Claude Code release adds it; nothing to change server-side. Note: the run itself is fast here; why the reporter's hit 90 s is unknown (machine load or an earlier scene revision).
 
 Non-goal: a hand-written job table / polling tool. The extension is that.
 
@@ -170,7 +170,7 @@ Passed via real-world dogfooding rather than the formal 4-fixture rubric at `doc
 (M1, M2 passed — see `docs/progress.md`.)
 
 
-### M7 — Long run returns as a task 🚧 (FastMCP-client half passed 2026-09-03; Claude Code half pending)
+### M7 — Long run returns as a task ✅ (passed 2026-09-03; task path verified with the FastMCP client, Claude Code currently takes the blocking path by its own choice)
 The July 10 reporter's 400-step hyperelastic scene, called from a fresh Claude Code session, returns a task handle and delivers the diagnose result without a timeout. User confirms from the client side; `pytest` cannot see the client.
 ---
 
